@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -13,7 +12,6 @@ import (
 	"github.com/XiaoConstantine/dspy-go/pkg/core"
 	"github.com/XiaoConstantine/dspy-go/pkg/modules"
 
-	"github.com/XiaoConstantine/dspy-go/examples/utils"
 	workflows "github.com/XiaoConstantine/dspy-go/pkg/agents/workflows"
 	"github.com/XiaoConstantine/dspy-go/pkg/llms"
 	"github.com/XiaoConstantine/dspy-go/pkg/logging"
@@ -334,7 +332,7 @@ func RunOrchestratorExample(ctx context.Context, logger *logging.Logger, dspyCon
 
 	// The analyzer will return tasks in XML format that our parser understands
 	task := "Create a summary report of quarterly sales data, identifying top products and regional performance trends"
-	contextData := map[string]interface{}{
+	contextData := map[string]any{
 		"key": "value",
 	}
 
@@ -392,7 +390,7 @@ func main() {
 		Outputs:  []logging.Output{output, fileOutput},
 	})
 	logging.SetLogger(logger)
-	apiKey := flag.String("api-key", "", "Anthropic API Key")
+	//apiKey := flag.String("api-key", "", "Anthropic API Key")
 
 	ctx := core.WithExecutionState(context.Background())
 	logger.Info(ctx, "Starting application")
@@ -400,10 +398,29 @@ func main() {
 	logger.Warn(ctx, "This is a warning message")
 
 	// Create an Ollama configuration with custom host and model
-	ollamaConfig := llms.NewOllamaConfig("http://192.168.1.199:11434", "gemma3:27b")
+	//ollamaConfig := llms.NewOllamaConfig("http://192.168.1.199:11434", "gemma3:27b")
+
+	// Get API key from environment
+	apiKey := os.Getenv("OPENROUTER_API_KEY")
+	if apiKey == "" {
+		fmt.Println("Please set OPENROUTER_API_KEY environment variable")
+		os.Exit(1)
+	}
+
+	// Example 1: Using OpenRouterConfig
+	fmt.Println("=== Example 1: Using OpenRouterConfig ===")
+	// Create a model ID string with the openrouter prefix
+	modelID := core.ModelID("openrouter:deepseek/deepseek-r1:free")
 	
-	// Use the Ollama configuration to create an LLM
-	dspyConfig := utils.SetupLLM(*apiKey, ollamaConfig)
+	// Create the LLM directly using the model ID
+	llm, err := llms.NewLLM(apiKey, modelID)
+	if err != nil {
+		fmt.Printf("Error creating LLM: %v\n", err)
+		os.Exit(1)
+	}
+	
+	// Create DSPYConfig with the LLM
+	dspyConfig := core.NewDSPYConfig().WithDefaultLLM(llm)
 
 	// Pass the config to all example functions
 	RunChainExample(ctx, logger, dspyConfig)

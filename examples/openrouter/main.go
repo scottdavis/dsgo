@@ -20,7 +20,7 @@ func main() {
 	// Example 1: Using OpenRouterConfig
 	fmt.Println("=== Example 1: Using OpenRouterConfig ===")
 	// Create an OpenRouter config with a specific model
-	config := llms.NewOpenRouterConfig("anthropic/claude-3-opus-20240229")
+	config := llms.NewOpenRouterConfig("google/gemma-3-27b-it:free")
 	
 	// Create the LLM using the factory
 	llm, err := llms.NewLLM(apiKey, config)
@@ -49,7 +49,7 @@ func main() {
 	// Example 2: Using the string format
 	fmt.Println("=== Example 2: Using ModelID string format ===")
 	// Alternatively, you can use the string format
-	modelID := core.ModelID("openrouter:anthropic/claude-3-haiku-20240307")
+	modelID := core.ModelID("openrouter:google/gemma-3-27b-it:free")
 	
 	// Create the LLM using the factory with the string format
 	llm2, err := llms.NewLLM(apiKey, modelID)
