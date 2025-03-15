@@ -93,7 +93,7 @@ func (a *AnthropicLLM) Generate(ctx context.Context, prompt string, options ...c
 }
 
 // GenerateWithJSON implements the core.LLM interface.
-func (a *AnthropicLLM) GenerateWithJSON(ctx context.Context, prompt string, options ...core.GenerateOption) (map[string]interface{}, error) {
+func (a *AnthropicLLM) GenerateWithJSON(ctx context.Context, prompt string, options ...core.GenerateOption) (map[string]any, error) {
 	// This method is not directly supported by Anthropic's API
 	// We'll generate a response and attempt to parse it as JSON
 	response, err := a.Generate(ctx, prompt, options...)
@@ -104,7 +104,7 @@ func (a *AnthropicLLM) GenerateWithJSON(ctx context.Context, prompt string, opti
 	return utils.ParseJSONResponse(response.Content)
 }
 
-func (a *AnthropicLLM) GenerateWithFunctions(ctx context.Context, prompt string, functions []map[string]interface{}, options ...core.GenerateOption) (map[string]interface{}, error) {
+func (a *AnthropicLLM) GenerateWithFunctions(ctx context.Context, prompt string, functions []map[string]any, options ...core.GenerateOption) (map[string]any, error) {
 	panic("Not implemented")
 }
 

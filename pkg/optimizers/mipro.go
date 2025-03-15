@@ -11,7 +11,7 @@ import (
 )
 
 type MIPRO struct {
-	Metric               func(example, prediction map[string]interface{}, ctx context.Context) float64
+	Metric               func(example, prediction map[string]any, ctx context.Context) float64
 	NumCandidates        int
 	MaxBootstrappedDemos int
 	MaxLabeledDemos      int
@@ -23,7 +23,7 @@ type MIPRO struct {
 	Verbose              bool
 }
 
-func NewMIPRO(metric func(example, prediction map[string]interface{}, ctx context.Context) float64, opts ...MIPROOption) *MIPRO {
+func NewMIPRO(metric func(example, prediction map[string]any, ctx context.Context) float64, opts ...MIPROOption) *MIPRO {
 	m := &MIPRO{
 		Metric:               metric,
 		NumCandidates:        10,
@@ -227,7 +227,7 @@ func (m *MIPRO) evaluateProgram(ctx context.Context, program core.Program, datas
 		// First, try to use the context-aware metric if available
 		var score float64
 		if m.Metric != nil {
-			exampleMap := map[string]interface{}{}
+			exampleMap := map[string]any{}
 			for k, v := range example.Inputs {
 				exampleMap[k] = v
 			}

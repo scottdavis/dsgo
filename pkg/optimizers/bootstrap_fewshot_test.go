@@ -17,7 +17,7 @@ func init() {
 
 	mockLLM.On("Generate", mock.Anything, mock.Anything, mock.Anything).Return(&core.LLMResponse{Content: `answer: 
 	Paris`}, nil)
-	mockLLM.On("GenerateWithJSON", mock.Anything, mock.Anything, mock.Anything).Return(map[string]interface{}{"answer": "Paris"}, nil)
+	mockLLM.On("GenerateWithJSON", mock.Anything, mock.Anything, mock.Anything).Return(map[string]any{"answer": "Paris"}, nil)
 
 	core.GlobalConfig.DefaultLLM = mockLLM
 	core.GlobalConfig.TeacherLLM = mockLLM
@@ -30,7 +30,7 @@ func createProgram() core.Program {
 		[]core.OutputField{{Field: core.NewField("answer")}},
 	))
 
-	forwardFunc := func(ctx context.Context, inputs map[string]interface{}) (map[string]interface{}, error) {
+	forwardFunc := func(ctx context.Context, inputs map[string]any) (map[string]any, error) {
 
 		ctx, span := core.StartSpan(ctx, "Forward")
 		defer core.EndSpan(ctx)
@@ -51,14 +51,14 @@ func TestBootstrapFewShot(t *testing.T) {
 	student := createProgram()
 	teacher := createProgram()
 	// Create training set
-	trainset := []map[string]interface{}{
+	trainset := []map[string]any{
 		{"question": "What is the capital of France?"},
 		{"question": "What is the capital of Germany?"},
 		{"question": "What is the capital of Italy?"},
 	}
 
 	// Define metric function
-	metric := func(example, prediction map[string]interface{}, ctx context.Context) bool {
+	metric := func(example, prediction map[string]any, ctx context.Context) bool {
 		return true // Always return true for this test
 	}
 
@@ -115,14 +115,14 @@ func TestBootstrapFewShot(t *testing.T) {
 
 func TestBootstrapFewShotEdgeCases(t *testing.T) {
 
-	trainset := []map[string]interface{}{
+	trainset := []map[string]any{
 		{"question": "Q1"},
 		{"question": "Q2"},
 		{"question": "Q3"},
 	}
 
 	t.Run("MaxBootstrapped Zero", func(t *testing.T) {
-		optimizer := NewBootstrapFewShot(func(_, _ map[string]interface{}, _ context.Context) bool { return true }, 0)
+		optimizer := NewBootstrapFewShot(func(_, _ map[string]any, _ context.Context) bool { return true }, 0)
 		ctx := context.Background()
 
 		optimized, err := optimizer.Compile(ctx, createProgram(), createProgram(), trainset)
@@ -131,7 +131,7 @@ func TestBootstrapFewShotEdgeCases(t *testing.T) {
 	})
 
 	t.Run("MaxBootstrapped Large", func(t *testing.T) {
-		optimizer := NewBootstrapFewShot(func(_, _ map[string]interface{}, _ context.Context) bool {
+		optimizer := NewBootstrapFewShot(func(_, _ map[string]any, _ context.Context) bool {
 			return true
 		}, 100)
 		ctx := context.Background()
@@ -145,7 +145,7 @@ func TestBootstrapFewShotEdgeCases(t *testing.T) {
 	})
 
 	t.Run("Metric Rejects All", func(t *testing.T) {
-		optimizer := NewBootstrapFewShot(func(_, _ map[string]interface{}, _ context.Context) bool { return false }, 2)
+		optimizer := NewBootstrapFewShot(func(_, _ map[string]any, _ context.Context) bool { return false }, 2)
 		ctx := context.Background()
 		optimized, _ := optimizer.Compile(ctx, createProgram(), createProgram(), trainset)
 		assert.Equal(t, 0, len(optimized.Modules["predict"].(*modules.Predict).Demos))

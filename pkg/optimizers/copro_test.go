@@ -60,7 +60,7 @@ func TestCoproCompile(t *testing.T) {
 
 	// Create a Copro instance
 	copro := NewCopro(
-		func(example, prediction map[string]interface{}, ctx context.Context) bool { return true },
+		func(example, prediction map[string]any, ctx context.Context) bool { return true },
 		5,
 		mockSubOptimizer,
 	)
@@ -102,7 +102,7 @@ func TestCoproCompileWithPredict(t *testing.T) {
 
 	// Create a Copro instance
 	copro := NewCopro(
-		func(example, prediction map[string]interface{}, ctx context.Context) bool { return true },
+		func(example, prediction map[string]any, ctx context.Context) bool { return true },
 		5,
 		mockSubOptimizer,
 	)
@@ -139,7 +139,7 @@ func TestCoproCompileError(t *testing.T) {
 
 	// Create a Copro instance
 	copro := NewCopro(
-		func(example, prediction map[string]interface{}, ctx context.Context) bool { return true },
+		func(example, prediction map[string]any, ctx context.Context) bool { return true },
 		5,
 		mockSubOptimizer,
 	)

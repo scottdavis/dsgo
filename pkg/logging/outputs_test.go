@@ -150,7 +150,7 @@ func TestFileOutput(t *testing.T) {
 			File:     "file_output_test.go",
 			Line:     50,
 			TraceID:  "json-trace-id",
-			Fields: map[string]interface{}{
+			Fields: map[string]any{
 				"user_id": "user123",
 				"action":  "login",
 				"status":  "success",
@@ -166,7 +166,7 @@ func TestFileOutput(t *testing.T) {
 		require.NoError(t, err, "Failed to read JSON log file")
 
 		// Try to parse the content as JSON
-		var logData map[string]interface{}
+		var logData map[string]any
 		err = json.Unmarshal(content, &logData)
 		assert.NoError(t, err, "Log file doesn't contain valid JSON")
 

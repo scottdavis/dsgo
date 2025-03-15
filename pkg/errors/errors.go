@@ -38,7 +38,7 @@ type Error struct {
 }
 
 // Fields carries structured data about the error.
-type Fields map[string]interface{}
+type Fields map[string]any
 
 func (e *Error) Error() string {
 	var b strings.Builder
@@ -131,7 +131,7 @@ func (e *Error) Is(target error) bool {
 }
 
 // As implements error type casting for errors.As.
-func (e *Error) As(target interface{}) bool {
+func (e *Error) As(target any) bool {
 	// Check if target is a pointer to *Error
 	errorPtr, ok := target.(**Error)
 	if !ok {

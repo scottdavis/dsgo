@@ -38,7 +38,7 @@ func TestProgram(t *testing.T) {
 	t.Run("NewProgram", func(t *testing.T) {
 		mockModule := new(MockModule)
 		modules := map[string]Module{"test": mockModule}
-		forward := func(context.Context, map[string]interface{}) (map[string]interface{}, error) {
+		forward := func(context.Context, map[string]any) (map[string]any, error) {
 			return nil, nil
 		}
 
@@ -49,15 +49,15 @@ func TestProgram(t *testing.T) {
 
 	t.Run("Execute with valid inputs", func(t *testing.T) {
 		mockModule := new(MockModule)
-		expectedOutputs := map[string]interface{}{"result": "success"}
-		forward := func(ctx context.Context, inputs map[string]interface{}) (map[string]interface{}, error) {
+		expectedOutputs := map[string]any{"result": "success"}
+		forward := func(ctx context.Context, inputs map[string]any) (map[string]any, error) {
 			return expectedOutputs, nil
 		}
 
 		program := NewProgram(map[string]Module{"test": mockModule}, forward)
 		ctx := WithExecutionState(context.Background())
 
-		outputs, err := program.Execute(ctx, map[string]interface{}{"input": "test"})
+		outputs, err := program.Execute(ctx, map[string]any{"input": "test"})
 		assert.NoError(t, err)
 		assert.Equal(t, expectedOutputs, outputs)
 
@@ -78,7 +78,7 @@ func TestProgram(t *testing.T) {
 
 	t.Run("Execute with forward error", func(t *testing.T) {
 		expectedErr := errors.New("forward error")
-		forward := func(ctx context.Context, inputs map[string]interface{}) (map[string]interface{}, error) {
+		forward := func(ctx context.Context, inputs map[string]any) (map[string]any, error) {
 			return nil, expectedErr
 		}
 
@@ -132,8 +132,8 @@ func TestProgram(t *testing.T) {
 		mockOriginal.On("Clone").Return(mockCloned)
 
 		// Create a test forward function
-		forward := func(ctx context.Context, inputs map[string]interface{}) (map[string]interface{}, error) {
-			return map[string]interface{}{"test": "value"}, nil
+		forward := func(ctx context.Context, inputs map[string]any) (map[string]any, error) {
+			return map[string]any{"test": "value"}, nil
 		}
 
 		// Create the original program
@@ -158,8 +158,8 @@ func TestProgram(t *testing.T) {
 
 		// Test the forward function behavior
 		ctx := context.Background()
-		originalResult, originalErr := original.Forward(ctx, map[string]interface{}{"input": "test"})
-		cloneResult, cloneErr := clone.Forward(ctx, map[string]interface{}{"input": "test"})
+		originalResult, originalErr := original.Forward(ctx, map[string]any{"input": "test"})
+		cloneResult, cloneErr := clone.Forward(ctx, map[string]any{"input": "test"})
 
 		// Verify forward function results match
 		assert.Equal(t, originalResult, cloneResult)
@@ -229,7 +229,7 @@ func TestProgram(t *testing.T) {
 		assert.Contains(t, program.Modules, "test")
 		assert.Same(t, mockModule, program.Modules["test"])
 
-		forward := func(ctx context.Context, inputs map[string]interface{}) (map[string]interface{}, error) {
+		forward := func(ctx context.Context, inputs map[string]any) (map[string]any, error) {
 			return nil, nil
 		}
 		program.SetForward(forward)

@@ -33,7 +33,7 @@ func TestReAct(t *testing.T) {
 	mockTool.On("Execute", mock.Anything, mock.Anything).Return(
 		core.ToolResult{
 			Data: "Tool execution result",
-			Metadata: map[string]interface{}{
+			Metadata: map[string]any{
 				"status": "success",
 			},
 		},

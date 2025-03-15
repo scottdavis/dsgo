@@ -228,7 +228,7 @@ func TestGeminiLLM_GenerateWithJSON(t *testing.T) {
 		name           string
 		serverResponse geminiResponse
 		expectError    bool
-		expectedJSON   map[string]interface{}
+		expectedJSON   map[string]any
 	}{
 		{
 			name: "Valid JSON response",
@@ -256,7 +256,7 @@ func TestGeminiLLM_GenerateWithJSON(t *testing.T) {
 				},
 			},
 			expectError:  false,
-			expectedJSON: map[string]interface{}{"key": "value"},
+			expectedJSON: map[string]any{"key": "value"},
 		},
 		{
 			name: "Invalid JSON response",

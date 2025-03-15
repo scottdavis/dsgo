@@ -10,11 +10,11 @@ import (
 // Program represents a complete DSPy pipeline or workflow.
 type Program struct {
 	Modules map[string]Module
-	Forward func(ctx context.Context, inputs map[string]interface{}) (map[string]interface{}, error)
+	Forward func(ctx context.Context, inputs map[string]any) (map[string]any, error)
 }
 
 // NewProgram creates a new Program with the given modules and forward function.
-func NewProgram(modules map[string]Module, forward func(context.Context, map[string]interface{}) (map[string]interface{}, error)) Program {
+func NewProgram(modules map[string]Module, forward func(context.Context, map[string]any) (map[string]any, error)) Program {
 	return Program{
 		Modules: modules,
 		Forward: forward,
@@ -22,7 +22,7 @@ func NewProgram(modules map[string]Module, forward func(context.Context, map[str
 }
 
 // Execute runs the program with the given inputs.
-func (p Program) Execute(ctx context.Context, inputs map[string]interface{}) (map[string]interface{}, error) {
+func (p Program) Execute(ctx context.Context, inputs map[string]any) (map[string]any, error) {
 	if p.Forward == nil {
 		return nil, errors.New("forward function is not defined")
 	}
@@ -101,7 +101,7 @@ func (p *Program) AddModule(name string, module Module) {
 }
 
 // SetForward sets the forward function for the Program.
-func (p *Program) SetForward(forward func(context.Context, map[string]interface{}) (map[string]interface{}, error)) {
+func (p *Program) SetForward(forward func(context.Context, map[string]any) (map[string]any, error)) {
 	p.Forward = forward
 }
 

@@ -7,8 +7,8 @@ import (
 )
 
 // ParseJSONResponse attempts to parse a string response as JSON.
-func ParseJSONResponse(response string) (map[string]interface{}, error) {
-	var result map[string]interface{}
+func ParseJSONResponse(response string) (map[string]any, error) {
+	var result map[string]any
 	err := json.Unmarshal([]byte(response), &result)
 	if err != nil {
 		return nil, errors.WithFields(

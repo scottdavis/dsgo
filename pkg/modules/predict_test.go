@@ -47,10 +47,10 @@ func TestPredict(t *testing.T) {
 	require.Len(t, spans, 1)
 	span := spans[0]
 
-	inputsMap, _ := span.Annotations["inputs"].(map[string]interface{})
+	inputsMap, _ := span.Annotations["inputs"].(map[string]any)
 	question, _ := inputsMap["question"].(string)
 
-	outputsMap, _ := span.Annotations["outputs"].(map[string]interface{})
+	outputsMap, _ := span.Annotations["outputs"].(map[string]any)
 	answer, _ := outputsMap["answer"].(string)
 
 	assert.Contains(t, question, "What is the meaning of life?")

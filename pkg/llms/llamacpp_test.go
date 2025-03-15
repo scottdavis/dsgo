@@ -38,20 +38,20 @@ func TestNewLlamacppLLM(t *testing.T) {
 func TestLlamacppLLM_Generate(t *testing.T) {
 	tests := []struct {
 		name           string
-		serverResponse map[string]interface{}
+		serverResponse map[string]any
 		serverStatus   int
 		expectError    bool
 		validateFunc   func(*testing.T, *core.LLMResponse)
 	}{
 		{
 			name: "Successful generation",
-			serverResponse: map[string]interface{}{
+			serverResponse: map[string]any{
 				"index":            0,
 				"content":          "Test response content",
 				"tokens_predicted": 10,
 				"tokens_evaluated": 5,
 				"stop":             true,
-				"timings": map[string]interface{}{
+				"timings": map[string]any{
 					"predicted_ms": 100.0,
 					"prompt_ms":    50.0,
 				},
@@ -74,8 +74,8 @@ func TestLlamacppLLM_Generate(t *testing.T) {
 		},
 		{
 			name: "Invalid JSON response",
-			serverResponse: map[string]interface{}{
-				"content": map[string]interface{}{}, // Invalid content type
+			serverResponse: map[string]any{
+				"content": map[string]any{}, // Invalid content type
 			},
 			serverStatus: http.StatusOK,
 			expectError:  false,
@@ -127,17 +127,17 @@ func TestLlamacppLLM_Generate(t *testing.T) {
 	}
 }
 
-func createFullLlamaCPPResponse() map[string]interface{} {
-	return map[string]interface{}{
+func createFullLlamaCPPResponse() map[string]any {
+	return map[string]any{
 		"index":            0,
 		"content":          "Sample response content",
-		"tokens":           []interface{}{},
+		"tokens":           []any{},
 		"id_slot":          0,
 		"stop":             true,
 		"model":            "test-model",
 		"tokens_predicted": 432,
 		"tokens_evaluated": 265,
-		"generation_settings": map[string]interface{}{
+		"generation_settings": map[string]any{
 			"n_predict":         4096,
 			"temperature":       0.5,
 			"top_k":             40,
@@ -148,13 +148,13 @@ func createFullLlamaCPPResponse() map[string]interface{} {
 			"mirostat":          0,
 			"mirostat_tau":      5.0,
 			"mirostat_eta":      0.1,
-			"speculative": map[string]interface{}{
+			"speculative": map[string]any{
 				"n_max": 16,
 				"n_min": 5,
 				"p_min": 0.9,
 			},
 		},
-		"timings": map[string]interface{}{
+		"timings": map[string]any{
 			"prompt_n":               1,
 			"prompt_ms":              4191.321,
 			"prompt_per_token_ms":    4191.321,
@@ -172,12 +172,12 @@ func TestLlamaCppLLM_GenerateWithJSON(t *testing.T) {
 		name            string
 		responseContent string
 		expectError     bool
-		expectedJSON    map[string]interface{}
+		expectedJSON    map[string]any
 	}{
 		{
 			name:            "valid JSON response",
 			responseContent: `{"key": "value"}`,
-			expectedJSON:    map[string]interface{}{"key": "value"},
+			expectedJSON:    map[string]any{"key": "value"},
 		},
 		{
 			name:            "invalid JSON response",

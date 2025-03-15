@@ -16,7 +16,7 @@ import (
 )
 
 func TestNewMIPRO(t *testing.T) {
-	metric := func(example, prediction map[string]interface{}, ctx context.Context) float64 { return 0 }
+	metric := func(example, prediction map[string]any, ctx context.Context) float64 { return 0 }
 	mipro := NewMIPRO(metric,
 		WithNumCandidates(20),
 		WithMaxBootstrappedDemos(10),
@@ -41,8 +41,8 @@ func TestMIPRO_Compile(t *testing.T) {
 	mockLLM := new(testutil.MockLLM)
 	mockDataset := &testutil.MockDataset{
 		Examples: []core.Example{
-			{Inputs: map[string]interface{}{"input": "test1"}, Outputs: map[string]interface{}{"output": "result1"}},
-			{Inputs: map[string]interface{}{"input": "test2"}, Outputs: map[string]interface{}{"output": "result2"}},
+			{Inputs: map[string]any{"input": "test1"}, Outputs: map[string]any{"output": "result1"}},
+			{Inputs: map[string]any{"input": "test2"}, Outputs: map[string]any{"output": "result2"}},
 		},
 	}
 	// Set up expectations for the dataset
@@ -51,10 +51,10 @@ func TestMIPRO_Compile(t *testing.T) {
 	mockDataset.On("Reset").Return().Times(2) // Expect Reset to be called for each trial
 
 	mockLLM.On("Generate", mock.Anything, mock.Anything, mock.Anything).Return("Instruction", nil)
-	mockLLM.On("GenerateWithJSON", mock.Anything, mock.Anything, mock.Anything).Return(map[string]interface{}{"output": "result"}, nil)
+	mockLLM.On("GenerateWithJSON", mock.Anything, mock.Anything, mock.Anything).Return(map[string]any{"output": "result"}, nil)
 
-	metric := func(example, prediction map[string]interface{}, ctx context.Context) float64 { return 1.0 }
-	metricWrapper := func(expected, actual map[string]interface{}) float64 {
+	metric := func(example, prediction map[string]any, ctx context.Context) float64 { return 1.0 }
+	metricWrapper := func(expected, actual map[string]any) float64 {
 		return metric(expected, actual, nil)
 	}
 
@@ -76,7 +76,7 @@ func TestMIPRO_Compile(t *testing.T) {
 				Outputs: []core.OutputField{{Field: core.Field{Name: "output"}}},
 			}),
 		},
-		func(ctx context.Context, inputs map[string]interface{}) (map[string]interface{}, error) {
+		func(ctx context.Context, inputs map[string]any) (map[string]any, error) {
 			return mockLLM.GenerateWithJSON(ctx, inputs["input"].(string))
 		},
 	)
@@ -97,7 +97,7 @@ func TestMIPRO_CompileErrors(t *testing.T) {
 		mockLLM := new(testutil.MockLLM)
 		mockDataset := &testutil.MockDataset{
 			Examples: []core.Example{
-				{Inputs: map[string]interface{}{"input": "test1"}, Outputs: map[string]interface{}{"output": "result1"}},
+				{Inputs: map[string]any{"input": "test1"}, Outputs: map[string]any{"output": "result1"}},
 			},
 		}
 
@@ -119,7 +119,7 @@ func TestMIPRO_CompileErrors(t *testing.T) {
 		mockLLM := new(testutil.MockLLM)
 		mockDataset := &testutil.MockDataset{
 			Examples: []core.Example{
-				{Inputs: map[string]interface{}{"input": "test1"}, Outputs: map[string]interface{}{"output": "result1"}},
+				{Inputs: map[string]any{"input": "test1"}, Outputs: map[string]any{"output": "result1"}},
 			},
 		}
 
@@ -161,7 +161,7 @@ func TestMIPRO_CompileErrors(t *testing.T) {
 }
 
 func setupMIPRO(mockLLM *testutil.MockLLM) *MIPRO {
-	metric := func(example, prediction map[string]interface{}, ctx context.Context) float64 { return 1.0 }
+	metric := func(example, prediction map[string]any, ctx context.Context) float64 { return 1.0 }
 	return NewMIPRO(metric,
 		WithNumCandidates(1),
 		WithMaxBootstrappedDemos(1),
@@ -181,13 +181,13 @@ func setupProgram(mockLLM *testutil.MockLLM) core.Program {
 				Outputs: []core.OutputField{{Field: core.Field{Name: "output"}}},
 			}),
 		},
-		func(ctx context.Context, inputs map[string]interface{}) (map[string]interface{}, error) {
+		func(ctx context.Context, inputs map[string]any) (map[string]any, error) {
 			return mockLLM.GenerateWithJSON(ctx, inputs["input"].(string))
 		},
 	)
 }
 
-func metricWrapper(expected, actual map[string]interface{}) float64 {
+func metricWrapper(expected, actual map[string]any) float64 {
 	return 1.0
 }
 
@@ -236,18 +236,18 @@ func TestMIPRO_constructProgram(t *testing.T) {
 	demoCandidates := [][][]core.Example{
 		{
 			{
-				{Inputs: map[string]interface{}{"input": "test1"}, Outputs: map[string]interface{}{"output": "result1"}},
+				{Inputs: map[string]any{"input": "test1"}, Outputs: map[string]any{"output": "result1"}},
 			},
 			{
-				{Inputs: map[string]interface{}{"input": "test2"}, Outputs: map[string]interface{}{"output": "result2"}},
+				{Inputs: map[string]any{"input": "test2"}, Outputs: map[string]any{"output": "result2"}},
 			},
 		},
 		{
 			{
-				{Inputs: map[string]interface{}{"input": "test3"}, Outputs: map[string]interface{}{"output": "result3"}},
+				{Inputs: map[string]any{"input": "test3"}, Outputs: map[string]any{"output": "result3"}},
 			},
 			{
-				{Inputs: map[string]interface{}{"input": "test4"}, Outputs: map[string]interface{}{"output": "result4"}},
+				{Inputs: map[string]any{"input": "test4"}, Outputs: map[string]any{"output": "result4"}},
 			},
 		},
 	}
@@ -324,8 +324,8 @@ func TestMIPRO_generateInstructionCandidates(t *testing.T) {
 func TestMIPRO_generateDemoCandidates(t *testing.T) {
 	mockDataset := &testutil.MockDataset{
 		Examples: []core.Example{
-			{Inputs: map[string]interface{}{"input": "test1"}, Outputs: map[string]interface{}{"output": "result1"}},
-			{Inputs: map[string]interface{}{"input": "test2"}, Outputs: map[string]interface{}{"output": "result2"}},
+			{Inputs: map[string]any{"input": "test1"}, Outputs: map[string]any{"output": "result1"}},
+			{Inputs: map[string]any{"input": "test2"}, Outputs: map[string]any{"output": "result2"}},
 		},
 	}
 	mockDataset.On("Next").Return(mockDataset.Examples[0], true).Once()

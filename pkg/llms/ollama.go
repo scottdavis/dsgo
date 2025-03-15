@@ -11,6 +11,7 @@ import (
 	"github.com/XiaoConstantine/dspy-go/pkg/core"
 	"github.com/XiaoConstantine/dspy-go/pkg/errors"
 	"github.com/XiaoConstantine/dspy-go/pkg/utils"
+	ollamaApi "github.com/ollama/ollama/api"
 )
 
 // OllamaLLM implements the core.LLM interface for Ollama-hosted models.
@@ -42,45 +43,6 @@ func NewOllamaLLM(endpoint, model string) (*OllamaLLM, error) {
 	}, nil
 }
 
-type ollamaRequest struct {
-	Model       string  `json:"model"`
-	Prompt      string  `json:"prompt"`
-	Stream      bool    `json:"stream"`
-	MaxTokens   int     `json:"max_tokens,omitempty"`
-	Temperature float64 `json:"temperature,omitempty"`
-}
-
-type ollamaResponse struct {
-	Model     string `json:"model"`
-	CreatedAt string `json:"created_at"`
-	Response  string `json:"response"`
-}
-
-// Define request/response structures for Ollama embeddings.
-type ollamaEmbeddingRequest struct {
-	Model   string                 `json:"model"`   // Required model name
-	Prompt  string                 `json:"prompt"`  // Input text for embedding
-	Options map[string]interface{} `json:"options"` // Additional model-specific options
-}
-
-type ollamaBatchEmbeddingRequest struct {
-	Model   string                 `json:"model"`   // Required model name
-	Prompts []string               `json:"prompts"` // List of inputs for batch embedding
-	Options map[string]interface{} `json:"options"` // Additional model-specific options
-}
-
-type ollamaEmbeddingResponse struct {
-	Embedding []float32 `json:"embedding"` // The embedding vector
-	Size      int       `json:"size"`      // Dimension of the embedding
-	Usage     struct {
-		Tokens int `json:"tokens"` // Number of tokens processed
-	} `json:"usage"`
-}
-
-type ollamaBatchEmbeddingResponse struct {
-	Embeddings []ollamaEmbeddingResponse `json:"embeddings"`
-}
-
 // Generate implements the core.LLM interface.
 func (o *OllamaLLM) Generate(ctx context.Context, prompt string, options ...core.GenerateOption) (*core.LLMResponse, error) {
 	opts := core.NewGenerateOptions()
@@ -88,12 +50,15 @@ func (o *OllamaLLM) Generate(ctx context.Context, prompt string, options ...core
 		opt(opts)
 	}
 
-	reqBody := ollamaRequest{
-		Model:       o.ModelID(),
-		Prompt:      prompt,
-		Stream:      false,
-		MaxTokens:   opts.MaxTokens,
-		Temperature: opts.Temperature,
+	stream := false
+	reqBody := ollamaApi.GenerateRequest{
+		Model:   string(o.ModelID()),
+		Prompt:  prompt,
+		Stream:  &stream,
+		Options: map[string]any{
+			"max_tokens":   opts.MaxTokens,
+			"temperature":  opts.Temperature,
+		},
 	}
 
 	jsonData, err := json.Marshal(reqBody)
@@ -148,7 +113,7 @@ func (o *OllamaLLM) Generate(ctx context.Context, prompt string, options ...core
 			})
 	}
 
-	var ollamaResp ollamaResponse
+	var ollamaResp ollamaApi.GenerateResponse
 	err = json.Unmarshal(body, &ollamaResp)
 	if err != nil {
 		return &core.LLMResponse{}, errors.WithFields(
@@ -165,7 +130,7 @@ func (o *OllamaLLM) Generate(ctx context.Context, prompt string, options ...core
 }
 
 // GenerateWithJSON implements the core.LLM interface.
-func (o *OllamaLLM) GenerateWithJSON(ctx context.Context, prompt string, options ...core.GenerateOption) (map[string]interface{}, error) {
+func (o *OllamaLLM) GenerateWithJSON(ctx context.Context, prompt string, options ...core.GenerateOption) (map[string]any, error) {
 	response, err := o.Generate(ctx, prompt, options...)
 	if err != nil {
 		return nil, err
@@ -174,7 +139,7 @@ func (o *OllamaLLM) GenerateWithJSON(ctx context.Context, prompt string, options
 	return utils.ParseJSONResponse(response.Content)
 }
 
-func (o *OllamaLLM) GenerateWithFunctions(ctx context.Context, prompt string, functions []map[string]interface{}, options ...core.GenerateOption) (map[string]interface{}, error) {
+func (o *OllamaLLM) GenerateWithFunctions(ctx context.Context, prompt string, functions []map[string]any, options ...core.GenerateOption) (map[string]any, error) {
 	panic("Not implemented")
 }
 
@@ -187,9 +152,9 @@ func (o *OllamaLLM) CreateEmbedding(ctx context.Context, input string, options .
 	}
 
 	// Create the request body
-	reqBody := ollamaEmbeddingRequest{
-		Model:   o.ModelID(), // Use the model ID from the LLM instance
-		Prompt:  input,
+	reqBody := ollamaApi.EmbedRequest{
+		Model:   string(o.ModelID()), // Use the model ID from the LLM instance
+		Input:   input,
 		Options: opts.Params,
 	}
 
@@ -233,19 +198,43 @@ func (o *OllamaLLM) CreateEmbedding(ctx context.Context, input string, options .
 		return nil, fmt.Errorf("API request failed with status code %d: %s", resp.StatusCode, string(body))
 	}
 
-	// Parse the response
-	var ollamaResp ollamaEmbeddingResponse
-	if err := json.Unmarshal(body, &ollamaResp); err != nil {
+	// Parse the response directly into a map to extract the embedding
+	var responseMap map[string]any
+	if err := json.Unmarshal(body, &responseMap); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
+	}
+
+	// Extract the embedding vector and size from the response
+	embeddingData, ok := responseMap["embedding"].([]any)
+	if !ok {
+		return nil, fmt.Errorf("response does not contain embedding data")
+	}
+
+	// Convert the embedding data to []float32
+	embedding := make([]float32, len(embeddingData))
+	for i, value := range embeddingData {
+		floatValue, ok := value.(float64) // JSON unmarshals numbers as float64
+		if !ok {
+			return nil, fmt.Errorf("embedding data contains non-numeric values")
+		}
+		embedding[i] = float32(floatValue)
+	}
+
+	// Extract the size if available
+	var size int
+	if sizeValue, ok := responseMap["size"].(float64); ok {
+		size = int(sizeValue)
+	} else {
+		size = len(embedding) // Use length as fallback
 	}
 
 	// Convert to our standard EmbeddingResult format
 	result := &core.EmbeddingResult{
-		Vector:     ollamaResp.Embedding,
-		TokenCount: ollamaResp.Usage.Tokens,
-		Metadata: map[string]interface{}{
+		Vector:     embedding,
+		TokenCount: 0, // The Ollama API doesn't provide token count in the response
+		Metadata: map[string]any{
 			"model":          o.ModelID(),
-			"embedding_size": ollamaResp.Size,
+			"embedding_size": size,
 		},
 	}
 
@@ -279,9 +268,9 @@ func (o *OllamaLLM) CreateEmbeddings(ctx context.Context, inputs []string, optio
 
 		// Create batch request
 		batch := inputs[i:end]
-		reqBody := ollamaBatchEmbeddingRequest{
-			Model:   o.ModelID(),
-			Prompts: batch,
+		reqBody := ollamaApi.EmbeddingRequest{
+			Model:   string(o.ModelID()),
+			Prompt:  batch[0], // EmbeddingRequest only takes a single string prompt
 			Options: opts.Params,
 		}
 
@@ -344,8 +333,9 @@ func (o *OllamaLLM) CreateEmbeddings(ctx context.Context, inputs []string, optio
 			continue
 		}
 
-		var batchResp ollamaBatchEmbeddingResponse
-		if err := json.Unmarshal(body, &batchResp); err != nil {
+		// Parse the batch response directly into a map
+		var responseMap map[string]any
+		if err := json.Unmarshal(body, &responseMap); err != nil {
 			if firstError == nil {
 				firstError = fmt.Errorf("failed to unmarshal batch response: %w", err)
 				errorIndex = i
@@ -353,14 +343,54 @@ func (o *OllamaLLM) CreateEmbeddings(ctx context.Context, inputs []string, optio
 			continue
 		}
 
-		// Convert batch results
-		for j, embedding := range batchResp.Embeddings {
+		// Extract the embeddings from the response
+		embeddingsData, ok := responseMap["embeddings"].([]any)
+		if !ok {
+			if firstError == nil {
+				firstError = fmt.Errorf("response does not contain embeddings data")
+				errorIndex = i
+			}
+			continue
+		}
+
+		// Process each embedding in the batch
+		for j, embData := range embeddingsData {
+			embMap, ok := embData.(map[string]any)
+			if !ok {
+				continue // Skip this embedding if it's not a map
+			}
+
+			// Extract embedding vector
+			embVector, ok := embMap["embedding"].([]any)
+			if !ok {
+				continue // Skip this embedding if it doesn't have a valid vector
+			}
+
+			// Convert the embedding data to []float32
+			embedding := make([]float32, len(embVector))
+			for k, value := range embVector {
+				floatValue, ok := value.(float64) // JSON unmarshals numbers as float64
+				if !ok {
+					continue // Skip this value if it's not a number
+				}
+				embedding[k] = float32(floatValue)
+			}
+
+			// Extract size if available
+			var size int
+			if sizeValue, ok := embMap["size"].(float64); ok {
+				size = int(sizeValue)
+			} else {
+				size = len(embedding) // Use length as fallback
+			}
+
+			// Create the embedding result
 			result := core.EmbeddingResult{
-				Vector:     embedding.Embedding,
-				TokenCount: embedding.Usage.Tokens,
-				Metadata: map[string]interface{}{
+				Vector:     embedding,
+				TokenCount: 0, // Ollama doesn't provide token counts in embedding responses
+				Metadata: map[string]any{
 					"model":          o.ModelID(),
-					"embedding_size": embedding.Size,
+					"embedding_size": size,
 					"batch_index":    i + j,
 				},
 			}

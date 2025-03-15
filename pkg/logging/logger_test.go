@@ -53,7 +53,7 @@ func (m *MockOutput) GetEntries() []LogEntry {
 
 func TestNewLogger(t *testing.T) {
 	mockOutput := NewMockOutput()
-	defaultFields := map[string]interface{}{
+	defaultFields := map[string]any{
 		"service": "test",
 		"version": "1.0",
 	}
@@ -141,7 +141,7 @@ func TestPromptCompletionLogging(t *testing.T) {
 
 func TestFieldTruncation(t *testing.T) {
 	longText := strings.Repeat("a", 200)
-	fields := map[string]interface{}{
+	fields := map[string]any{
 		"prompt":     longText,
 		"completion": longText,
 	}

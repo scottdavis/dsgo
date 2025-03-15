@@ -46,7 +46,7 @@ func TestCompileOptions(t *testing.T) {
 				[]OutputField{{Field: Field{Name: "output"}}},
 			)),
 		},
-		Forward: func(ctx context.Context, inputs map[string]interface{}) (map[string]interface{}, error) {
+		Forward: func(ctx context.Context, inputs map[string]any) (map[string]any, error) {
 			return inputs, nil
 		},
 	}
@@ -84,7 +84,7 @@ func TestBootstrapFewShot(t *testing.T) {
 	dataset := &MockDataset{}
 
 	// Create a simple metric for testing
-	metric := func(expected, actual map[string]interface{}) float64 {
+	metric := func(expected, actual map[string]any) float64 {
 		return 1.0 // Always return 1.0 for this test
 	}
 

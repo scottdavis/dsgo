@@ -12,7 +12,7 @@ type Optimizer interface {
 }
 
 // Metric is a function type that evaluates the performance of a program.
-type Metric func(expected, actual map[string]interface{}) float64
+type Metric func(expected, actual map[string]any) float64
 
 // Dataset represents a collection of examples for training/evaluation.
 type Dataset interface {
@@ -24,8 +24,8 @@ type Dataset interface {
 
 // Example represents a single training/evaluation example.
 type Example struct {
-	Inputs  map[string]interface{}
-	Outputs map[string]interface{}
+	Inputs  map[string]any
+	Outputs map[string]any
 }
 
 // BaseOptimizer provides a basic implementation of the Optimizer interface.

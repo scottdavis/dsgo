@@ -83,7 +83,7 @@ func (r *ReAct) Process(ctx context.Context, inputs map[string]any, opts ...core
 }
 
 // executeMatchingTool finds and executes the appropriate tool for the given action.
-func (r *ReAct) executeMatchingTool(ctx context.Context, action string, inputs map[string]interface{}) (*core.ToolResult, error) {
+func (r *ReAct) executeMatchingTool(ctx context.Context, action string, inputs map[string]any) (*core.ToolResult, error) {
 	logger := logging.GetLogger()
 	logger.Debug(ctx, "action str: %s", action)
 
@@ -162,8 +162,8 @@ func formatToolResult(result core.ToolResult) string {
 }
 
 // extractToolParams extracts tool parameters from the action string and current inputs.
-func extractToolParams(action string, inputs map[string]interface{}, toolMetadata *core.ToolMetadata) map[string]interface{} {
-	params := make(map[string]interface{})
+func extractToolParams(action string, inputs map[string]any, toolMetadata *core.ToolMetadata) map[string]any {
+	params := make(map[string]any)
 
 	// Always include the action
 	params["action"] = action

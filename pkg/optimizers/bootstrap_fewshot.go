@@ -14,18 +14,18 @@ import (
 )
 
 type BootstrapFewShot struct {
-	Metric          func(example map[string]interface{}, prediction map[string]interface{}, ctx context.Context) bool
+	Metric          func(example map[string]any, prediction map[string]any, ctx context.Context) bool
 	MaxBootstrapped int
 }
 
-func NewBootstrapFewShot(metric func(example map[string]interface{}, prediction map[string]interface{}, ctx context.Context) bool, maxBootstrapped int) *BootstrapFewShot {
+func NewBootstrapFewShot(metric func(example map[string]any, prediction map[string]any, ctx context.Context) bool, maxBootstrapped int) *BootstrapFewShot {
 	return &BootstrapFewShot{
 		Metric:          metric,
 		MaxBootstrapped: maxBootstrapped,
 	}
 }
 
-func (b *BootstrapFewShot) Compile(ctx context.Context, student, teacher core.Program, trainset []map[string]interface{}) (core.Program, error) {
+func (b *BootstrapFewShot) Compile(ctx context.Context, student, teacher core.Program, trainset []map[string]any) (core.Program, error) {
 	compiledStudent := student.Clone()
 	teacherLLM := core.GetTeacherLLM()
 	if teacherLLM == nil {
@@ -124,7 +124,7 @@ func (b *BootstrapFewShot) Compile(ctx context.Context, student, teacher core.Pr
 	return compiledStudent, nil
 }
 
-func (b *BootstrapFewShot) predictWithTeacher(ctx context.Context, teacher core.Program, teacherLLM core.LLM, example map[string]interface{}) (map[string]interface{}, error) {
+func (b *BootstrapFewShot) predictWithTeacher(ctx context.Context, teacher core.Program, teacherLLM core.LLM, example map[string]any) (map[string]any, error) {
 	// Clone the teacher program and set its LLM to the teacher LLM
 	teacherClone := teacher.Clone()
 	for _, module := range teacherClone.Modules {

@@ -38,7 +38,7 @@ func (p *Predict) WithDefaultOptions(opts ...core.Option) *Predict {
 	return p
 }
 
-func (p *Predict) Process(ctx context.Context, inputs map[string]interface{}, opts ...core.Option) (map[string]interface{}, error) {
+func (p *Predict) Process(ctx context.Context, inputs map[string]any, opts ...core.Option) (map[string]any, error) {
 	logger := logging.GetLogger()
 	callOptions := &core.ModuleOptions{}
 	for _, opt := range opts {
@@ -417,8 +417,8 @@ func outputFieldsToFields(outputs []core.OutputField) []core.Field {
 	return fields
 }
 
-func (p *Predict) FormatOutputs(outputs map[string]interface{}) map[string]interface{} {
-	formattedOutputs := make(map[string]interface{})
+func (p *Predict) FormatOutputs(outputs map[string]any) map[string]any {
+	formattedOutputs := make(map[string]any)
 	for _, field := range p.GetSignature().Outputs {
 		if value, ok := outputs[field.Name]; ok {
 			formattedOutputs[field.Name] = value
@@ -431,7 +431,7 @@ func (p *Predict) GetSignature() core.Signature {
 	return p.BaseModule.GetSignature()
 }
 
-func (p *Predict) ValidateInputs(inputs map[string]interface{}) error {
+func (p *Predict) ValidateInputs(inputs map[string]any) error {
 	signature := p.GetSignature()
 	for _, field := range signature.Inputs {
 		if _, ok := inputs[field.Name]; !ok {

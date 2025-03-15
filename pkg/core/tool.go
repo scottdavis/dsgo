@@ -22,17 +22,17 @@ type Tool interface {
 	CanHandle(ctx context.Context, intent string) bool
 
 	// Execute runs the tool with provided parameters
-	Execute(ctx context.Context, params map[string]interface{}) (ToolResult, error)
+	Execute(ctx context.Context, params map[string]any) (ToolResult, error)
 
 	// Validate checks if the parameters match the expected schema
-	Validate(params map[string]interface{}) error
+	Validate(params map[string]any) error
 }
 
 // ToolResult wraps tool execution results with metadata.
 type ToolResult struct {
-	Data        interface{}            // The actual result data
-	Metadata    map[string]interface{} // Execution metadata (timing, resources used, etc)
-	Annotations map[string]interface{} // Additional context for result interpretation
+	Data        any            // The actual result data
+	Metadata    map[string]any // Execution metadata (timing, resources used, etc)
+	Annotations map[string]any // Additional context for result interpretation
 }
 
 // ToolRegistry manages available tools.

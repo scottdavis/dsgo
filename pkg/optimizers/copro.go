@@ -9,12 +9,12 @@ import (
 )
 
 type Copro struct {
-	Metric          func(example, prediction map[string]interface{}, ctx context.Context) bool
+	Metric          func(example, prediction map[string]any, ctx context.Context) bool
 	MaxBootstrapped int
 	SubOptimizer    core.Optimizer
 }
 
-func NewCopro(metric func(example, prediction map[string]interface{}, ctx context.Context) bool, maxBootstrapped int, subOptimizer core.Optimizer) *Copro {
+func NewCopro(metric func(example, prediction map[string]any, ctx context.Context) bool, maxBootstrapped int, subOptimizer core.Optimizer) *Copro {
 	return &Copro{
 		Metric:          metric,
 		MaxBootstrapped: maxBootstrapped,
@@ -31,7 +31,7 @@ func (c *Copro) Compile(ctx context.Context, program core.Program, dataset core.
 	ctx, compilationSpan := core.StartSpan(ctx, "CoproCompilation")
 	defer core.EndSpan(ctx)
 
-	wrappedMetric := func(expected, actual map[string]interface{}) float64 {
+	wrappedMetric := func(expected, actual map[string]any) float64 {
 		metricCtx, metricSpan := core.StartSpan(ctx, "MetricEvaluation")
 		defer core.EndSpan(metricCtx)
 
