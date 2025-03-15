@@ -1,0 +1,8 @@
+---
+description: General Rules
+globs: 
+alwaysApply: true
+---
+Check Makefile for commands to run before shelling out
+Dont make up or add new model names to configurations. This can have a cost
+Always run make test and make lint when completing a task

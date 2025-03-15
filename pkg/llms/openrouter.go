@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
+	"time"
 
 	"github.com/XiaoConstantine/dspy-go/pkg/core"
 	"github.com/XiaoConstantine/dspy-go/pkg/errors"
@@ -87,12 +89,14 @@ type openRouterMessage struct {
 
 // openRouterResponse represents the response structure from OpenRouter API.
 type openRouterResponse struct {
-	ID      string    `json:"id"`
-	Object  string    `json:"object"`
-	Created int64     `json:"created"`
-	Model   string    `json:"model"`
-	Choices []choice  `json:"choices"`
-	Usage   usageInfo `json:"usage"`
+	ID      string          `json:"id"`
+	Object  string          `json:"object"`
+	Created int64           `json:"created"`
+	Model   string          `json:"model"`
+	Choices []choice        `json:"choices"`
+	Usage   usageInfo       `json:"usage"`
+	Meta    *openRouterMeta `json:"meta,omitempty"`
+	Error   *openRouterError `json:"error,omitempty"`
 }
 
 type choice struct {
@@ -105,6 +109,54 @@ type usageInfo struct {
 	PromptTokens     int `json:"prompt_tokens"`
 	CompletionTokens int `json:"completion_tokens"`
 	TotalTokens      int `json:"total_tokens"`
+}
+
+type openRouterMeta struct {
+	RateLimit *rateLimitMeta `json:"rate_limit,omitempty"`
+}
+
+type rateLimitMeta struct {
+	Limit     int   `json:"limit,omitempty"`
+	Remaining int   `json:"remaining,omitempty"`
+	Reset     int64 `json:"reset,omitempty"`
+}
+
+type openRouterError struct {
+	Message  string              `json:"message"`
+	Code     int                 `json:"code"`
+	Metadata *openRouterErrorMeta `json:"metadata,omitempty"`
+}
+
+type openRouterErrorMeta struct {
+	Headers map[string]string `json:"headers,omitempty"`
+}
+
+// Helper function to convert millisecond timestamp to hours until reset
+func formatResetTime(resetTimeMs string) string {
+	// Parse the reset time from string to int64
+	resetMs, err := strconv.ParseInt(resetTimeMs, 10, 64)
+	if err != nil {
+		return fmt.Sprintf("unknown (parse error: %v)", err)
+	}
+	
+	// Convert milliseconds to time.Time
+	resetTime := time.Unix(resetMs/1000, 0)
+	
+	// Calculate duration until reset
+	duration := time.Until(resetTime)
+	
+	// Convert to hours (with decimal precision)
+	hoursUntilReset := duration.Hours()
+	
+	if hoursUntilReset < 0 {
+		return "already passed"
+	}
+	
+	// Format date/time of reset in a human-readable format
+	resetTimeFormatted := resetTime.Format("2006-01-02 15:04:05 MST")
+	
+	// Format with 2 decimal places and include the actual reset time
+	return fmt.Sprintf("%.2f hours (resets at %s)", hoursUntilReset, resetTimeFormatted)
 }
 
 // Generate implements the core.LLM interface.
@@ -159,24 +211,112 @@ func (o *OpenRouterLLM) Generate(ctx context.Context, prompt string, options ...
 	}
 	defer resp.Body.Close()
 
+	// Read the response body
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, errors.WithFields(
+			errors.Wrap(err, errors.Unknown, "failed to read response body"),
+			errors.Fields{"model": o.ModelID()})
+	}
+	
+	// Create a new reader from the bytes for json.Decoder
+	bodyReader := bytes.NewReader(bodyBytes)
+
 	if resp.StatusCode != http.StatusOK {
-		bodyBytes, _ := io.ReadAll(resp.Body)
 		return nil, errors.WithFields(
 			errors.New(errors.InvalidResponse, fmt.Sprintf("OpenRouter API returned non-200 status code: %d, body: %s", resp.StatusCode, string(bodyBytes))),
 			errors.Fields{"model": o.ModelID(), "statusCode": resp.StatusCode})
 	}
 
 	var openRouterResp openRouterResponse
-	if err = json.NewDecoder(resp.Body).Decode(&openRouterResp); err != nil {
+	if err = json.NewDecoder(bodyReader).Decode(&openRouterResp); err != nil {
 		return nil, errors.WithFields(
 			errors.Wrap(err, errors.Unknown, "failed to decode response from OpenRouter API"),
 			errors.Fields{"model": o.ModelID()})
 	}
 
-	if len(openRouterResp.Choices) == 0 {
+	// Check for error in response
+	if openRouterResp.Error != nil {
+		// If we have an error with metadata containing rate limit headers
+		if openRouterResp.Error.Metadata != nil && openRouterResp.Error.Metadata.Headers != nil {
+			limit := openRouterResp.Error.Metadata.Headers["X-RateLimit-Limit"]
+			remaining := openRouterResp.Error.Metadata.Headers["X-RateLimit-Remaining"]
+			reset := openRouterResp.Error.Metadata.Headers["X-RateLimit-Reset"]
+			
+			if remaining == "0" || openRouterResp.Error.Code == 429 {
+				// Calculate hours until reset
+				resetTimeFormatted := formatResetTime(reset)
+				
+				return nil, errors.WithFields(
+					errors.New(errors.RateLimitExceeded, fmt.Sprintf("OpenRouter API rate limited (from error metadata): limit: %s, remaining: %s, reset: %s (%s)", 
+						limit, remaining, reset, resetTimeFormatted)),
+					errors.Fields{
+						"model": o.ModelID(),
+						"limit": limit,
+						"remaining": remaining,
+						"reset": reset,
+						"reset_in_hours": resetTimeFormatted,
+						"error_message": openRouterResp.Error.Message,
+					})
+			}
+		}
+		
+		// Generic error case
 		return nil, errors.WithFields(
-			errors.New(errors.InvalidResponse, "OpenRouter API returned empty choices"),
-			errors.Fields{"model": o.ModelID()})
+			errors.New(errors.Unknown, fmt.Sprintf("OpenRouter API returned error: %s", openRouterResp.Error.Message)),
+			errors.Fields{"model": o.ModelID(), "error_code": openRouterResp.Error.Code})
+	}
+
+	if len(openRouterResp.Choices) == 0 {
+		// Check if we were rate limited - first from headers
+		remaining := resp.Header.Get("X-RateLimit-Remaining")
+		limit := resp.Header.Get("X-RateLimit-Limit")
+		reset := resp.Header.Get("X-RateLimit-Reset")
+		
+		// Then check metadata if available
+		if openRouterResp.Meta != nil && openRouterResp.Meta.RateLimit != nil {
+			// Metadata values take precedence
+			if openRouterResp.Meta.RateLimit.Remaining == 0 {
+				// Convert metadata values to strings
+				metaLimit := strconv.Itoa(openRouterResp.Meta.RateLimit.Limit)
+				metaRemaining := strconv.Itoa(openRouterResp.Meta.RateLimit.Remaining)
+				metaReset := strconv.FormatInt(openRouterResp.Meta.RateLimit.Reset, 10)
+				
+				// Calculate hours until reset
+				resetTimeFormatted := formatResetTime(metaReset)
+				
+				return nil, errors.WithFields(
+					errors.New(errors.RateLimitExceeded, fmt.Sprintf("OpenRouter API rate limited (from metadata): limit: %s, remaining: %s, reset: %s (%s)", 
+						metaLimit, metaRemaining, metaReset, resetTimeFormatted)),
+					errors.Fields{
+						"model": o.ModelID(),
+						"limit": metaLimit,
+						"remaining": metaRemaining,
+						"reset": metaReset,
+						"reset_in_hours": resetTimeFormatted,
+					})
+			}
+		} else if remaining == "0" {
+			// Use header values if no metadata or if remaining in headers is 0
+			// Calculate hours until reset
+			resetTimeFormatted := formatResetTime(reset)
+			
+			return nil, errors.WithFields(
+				errors.New(errors.RateLimitExceeded, fmt.Sprintf("OpenRouter API rate limited (from headers): limit: %s, remaining: %s, reset: %s (%s)", 
+					limit, remaining, reset, resetTimeFormatted)),
+				errors.Fields{
+					"model": o.ModelID(),
+					"limit": limit,
+					"remaining": remaining,
+					"reset": reset,
+					"reset_in_hours": resetTimeFormatted,
+				})
+		}
+		
+		// If we get here, we have empty choices but no rate limiting
+		return nil, errors.WithFields(
+			errors.New(errors.InvalidResponse, "OpenRouter API returned no choices"),
+			errors.Fields{"model": o.ModelID(), "limit": limit, "remaining": remaining, "reset": reset})
 	}
 
 	// Extract the completion from the first choice
@@ -256,17 +396,124 @@ func (o *OpenRouterLLM) GenerateWithFunctions(ctx context.Context, prompt string
 	}
 	defer resp.Body.Close()
 
+	// Read the response body
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, errors.WithFields(
+			errors.Wrap(err, errors.Unknown, "failed to read response body"),
+			errors.Fields{"model": o.ModelID()})
+	}
+	
+	// Create a new reader from the bytes for json.Decoder
+	bodyReader := bytes.NewReader(bodyBytes)
+
 	if resp.StatusCode != http.StatusOK {
-		bodyBytes, _ := io.ReadAll(resp.Body)
 		return nil, errors.WithFields(
 			errors.New(errors.InvalidResponse, fmt.Sprintf("OpenRouter API returned non-200 status code: %d, body: %s", resp.StatusCode, string(bodyBytes))),
 			errors.Fields{"model": o.ModelID(), "statusCode": resp.StatusCode})
 	}
 
 	var result map[string]any
-	if err = json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	if err = json.NewDecoder(bodyReader).Decode(&result); err != nil {
 		return nil, errors.WithFields(
 			errors.Wrap(err, errors.Unknown, "failed to decode response from OpenRouter API"),
+			errors.Fields{"model": o.ModelID()})
+	}
+
+	// Check for error in response
+	errorObj, hasError := result["error"].(map[string]any)
+	if hasError {
+		// Check if we have error metadata with rate limit headers
+		metadata, hasMetadata := errorObj["metadata"].(map[string]any)
+		if hasMetadata {
+			headers, hasHeaders := metadata["headers"].(map[string]any)
+			if hasHeaders {
+				// Extract rate limit info from headers
+				limit, _ := headers["X-RateLimit-Limit"].(string)
+				remaining, _ := headers["X-RateLimit-Remaining"].(string)
+				reset, _ := headers["X-RateLimit-Reset"].(string)
+				
+				// Check if we're rate limited
+				if remaining == "0" || (errorObj["code"] != nil && errorObj["code"].(float64) == 429) {
+					errorMsg, _ := errorObj["message"].(string)
+					
+					// Calculate hours until reset
+					resetTimeFormatted := formatResetTime(reset)
+					
+					return nil, errors.WithFields(
+						errors.New(errors.RateLimitExceeded, fmt.Sprintf("OpenRouter API rate limited (from error metadata): limit: %s, remaining: %s, reset: %s (%s)", 
+							limit, remaining, reset, resetTimeFormatted)),
+						errors.Fields{
+							"model": o.ModelID(),
+							"error_message": errorMsg,
+							"reset_in_hours": resetTimeFormatted,
+						})
+				}
+			}
+		}
+		
+		// Generic error case
+		errorMsg, _ := errorObj["message"].(string)
+		return nil, errors.WithFields(
+			errors.New(errors.Unknown, fmt.Sprintf("OpenRouter API returned error: %s", errorMsg)),
+			errors.Fields{"model": o.ModelID()})
+	}
+
+	if len(result["choices"].([]any)) == 0 {
+		// Check if we were rate limited - first from headers
+		remaining := resp.Header.Get("X-RateLimit-Remaining")
+		limit := resp.Header.Get("X-RateLimit-Limit")
+		reset := resp.Header.Get("X-RateLimit-Reset")
+		
+		// Also check metadata if available
+		meta, hasMeta := result["meta"].(map[string]any)
+		if hasMeta {
+			rateLimit, hasRateLimit := meta["rate_limit"].(map[string]any)
+			if hasRateLimit {
+				metaRemaining, hasRemaining := rateLimit["remaining"].(float64)
+				if hasRemaining && metaRemaining == 0 {
+					// Convert metadata values to strings
+					metaLimit := "unknown"
+					if limit, hasLimit := rateLimit["limit"].(float64); hasLimit {
+						metaLimit = strconv.FormatFloat(limit, 'f', 0, 64)
+					}
+					
+					metaRemainingStr := strconv.FormatFloat(metaRemaining, 'f', 0, 64)
+					
+					metaReset := "unknown"
+					if reset, hasReset := rateLimit["reset"].(float64); hasReset {
+						metaReset = strconv.FormatFloat(reset, 'f', 0, 64)
+					}
+					
+					// Calculate hours until reset
+					resetTimeFormatted := formatResetTime(metaReset)
+					
+					return nil, errors.WithFields(
+						errors.New(errors.RateLimitExceeded, fmt.Sprintf("OpenRouter API rate limited (from metadata): limit: %s, remaining: %s, reset: %s (%s)", 
+							metaLimit, metaRemainingStr, metaReset, resetTimeFormatted)),
+						errors.Fields{
+							"model": o.ModelID(),
+							"reset_in_hours": resetTimeFormatted,
+						})
+				}
+			}
+		} else if remaining == "0" {
+			// Use header values if no metadata or if remaining in headers is 0
+			// Calculate hours until reset
+			resetTimeFormatted := formatResetTime(reset)
+			
+			return nil, errors.WithFields(
+				errors.New(errors.RateLimitExceeded, fmt.Sprintf("OpenRouter API rate limited (from headers): limit: %s, remaining: %s, reset: %s (%s)", 
+					limit, remaining, reset, resetTimeFormatted)),
+				errors.Fields{
+					"model": o.ModelID(),
+					"reset_in_hours": resetTimeFormatted,
+				})
+		}
+		
+		// If we get here, we have empty choices but no rate limiting
+		return nil, errors.WithFields(
+			errors.New(errors.InvalidResponse, "OpenRouter API returned no choices"),
 			errors.Fields{"model": o.ModelID()})
 	}
 
