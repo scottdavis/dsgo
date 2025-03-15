@@ -5,106 +5,78 @@ import (
 	"fmt"
 
 	"github.com/XiaoConstantine/dspy-go/pkg/core"
-	"github.com/XiaoConstantine/dspy-go/pkg/modules"
 )
 
 type Copro struct {
 	Metric          func(example, prediction map[string]any, ctx context.Context) bool
 	MaxBootstrapped int
 	SubOptimizer    core.Optimizer
+	Config          *core.DSPYConfig
 }
 
-func NewCopro(metric func(example, prediction map[string]any, ctx context.Context) bool, maxBootstrapped int, subOptimizer core.Optimizer) *Copro {
+func NewCopro(metric func(example, prediction map[string]any, ctx context.Context) bool, maxBootstrapped int, subOptimizer core.Optimizer, config *core.DSPYConfig) *Copro {
+	if config == nil {
+		config = core.NewDSPYConfig()
+	}
 	return &Copro{
 		Metric:          metric,
 		MaxBootstrapped: maxBootstrapped,
 		SubOptimizer:    subOptimizer,
+		Config:          config,
 	}
 }
-func (c *Copro) Compile(ctx context.Context, program core.Program, dataset core.Dataset, metric core.Metric) (core.Program, error) {
-	compiledProgram := program.Clone()
-	// Ensure execution state exists
+
+// Compile optimizes a program using the provided dataset and metric.
+func (c *Copro) Compile(ctx context.Context, program *core.Program, dataset core.Dataset, metric core.Metric) (*core.Program, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	if core.GetExecutionState(ctx) == nil {
 		ctx = core.WithExecutionState(ctx)
 	}
 
-	ctx, compilationSpan := core.StartSpan(ctx, "CoproCompilation")
+	ctx, span := core.StartSpan(ctx, "CoPro.Compile")
 	defer core.EndSpan(ctx)
 
-	wrappedMetric := func(expected, actual map[string]any) float64 {
-		metricCtx, metricSpan := core.StartSpan(ctx, "MetricEvaluation")
-		defer core.EndSpan(metricCtx)
+	// Create a copy of the program to optimize
+	compiledProgram := program.Clone()
 
-		metricSpan.WithAnnotation("expected", expected)
-		metricSpan.WithAnnotation("actual", actual)
-
-		// Use the context-based metric
-		if c.Metric(expected, actual, metricCtx) {
-			metricSpan.WithAnnotation("result", 1.0)
-			return 1.0
-		}
-
-		metricSpan.WithAnnotation("result", 0.0)
-
-		return 0.0
+	// Wrap the metric to handle the expected format
+	wrappedMetric := func(ctx context.Context, result map[string]any) (bool, string) {
+		return metric(ctx, result)
 	}
-	for moduleName, module := range compiledProgram.Modules {
-		moduleCtx, moduleSpan := core.StartSpan(ctx, fmt.Sprintf("Module_%s", moduleName))
 
-		compiledModule, err := c.compileModule(ctx, module, dataset, wrappedMetric)
+	// Compile each module in the program
+	for name, module := range compiledProgram.Modules {
+		span.WithAnnotation("compiling_module", name)
+		optimizedModule, err := c.compileModule(ctx, module, dataset, wrappedMetric)
 		if err != nil {
-			moduleSpan.WithError(err)
-			core.EndSpan(moduleCtx)
-			compilationSpan.WithError(err)
-
-			return compiledProgram, fmt.Errorf("error compiling module %s: %w", moduleName, err)
+			span.WithError(err)
+			return compiledProgram, fmt.Errorf("error compiling module %s: %w", name, err)
 		}
-
-		compiledProgram.Modules[moduleName] = compiledModule
-		moduleSpan.WithAnnotation("compiledModule", compiledModule)
-		core.EndSpan(moduleCtx)
-
+		compiledProgram.Modules[name] = optimizedModule
 	}
-
-	compilationSpan.WithAnnotation("compiledProgram", compiledProgram)
 
 	return compiledProgram, nil
 }
 
+// compileModule optimizes a single module using the provided dataset and metric.
 func (c *Copro) compileModule(ctx context.Context, module core.Module, dataset core.Dataset, metric core.Metric) (core.Module, error) {
-	switch m := module.(type) {
-	case *modules.Predict:
-		// Create a temporary Program with just this Predict module
-		tempProgram := core.NewProgram(map[string]core.Module{"predict": m}, nil)
-		// Compile using the SubOptimizer
-		compiledProgram, err := c.SubOptimizer.Compile(ctx, tempProgram, dataset, metric)
-		if err != nil {
-			return nil, err
-		}
+	// Create a program with just this module
+	moduleProgram := core.NewProgram(
+		map[string]core.Module{"module": module},
+		func(ctx context.Context, inputs map[string]any) (map[string]any, error) {
+			return module.Process(ctx, inputs)
+		},
+		c.Config,
+	)
 
-		// Extract the optimized Predict module from the compiled Program
-		optimizedPredict, ok := compiledProgram.Modules["predict"]
-		if !ok {
-			return nil, fmt.Errorf("compiled program does not contain 'predict' module")
-		}
-
-		return optimizedPredict, nil
-
-	case core.Composable:
-		subModules := m.GetSubModules()
-		for i, subModule := range subModules {
-			compiledSubModule, err := c.compileModule(ctx, subModule, dataset, metric)
-			if err != nil {
-				return nil, err
-			}
-			subModules[i] = compiledSubModule
-		}
-		m.SetSubModules(subModules)
-		return m, nil
-
-	default:
-		// For non-Predict, non-Composable modules, return as-is
-
-		return m, nil
+	// Optimize the module program using the SubOptimizer
+	optimizedProgram, err := c.SubOptimizer.Compile(ctx, moduleProgram, dataset, metric)
+	if err != nil {
+		return module, err
 	}
+
+	// Return the optimized module
+	return optimizedProgram.Modules["module"], nil
 }

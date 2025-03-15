@@ -22,6 +22,7 @@ const (
 	LLMGenerationFailed
 	TokenLimitExceeded
 	InvalidResponse
+	ConfigurationError // For errors related to configuration issues
 
 	// Workflow errors.
 	WorkflowExecutionFailed

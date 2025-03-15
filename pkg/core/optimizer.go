@@ -5,14 +5,19 @@ import (
 	"errors"
 )
 
-// Optimizer represents an interface for optimizing DSPy programs.
+// Optimizer is an interface for optimizing DSPy programs.
 type Optimizer interface {
-	// Compile optimizes a given program using the provided dataset and metric
-	Compile(ctx context.Context, program Program, dataset Dataset, metric Metric) (Program, error)
+	// Compile optimizes a program using the provided dataset and metric.
+	Compile(ctx context.Context, program *Program, dataset Dataset, metric Metric) (*Program, error)
 }
 
-// Metric is a function type that evaluates the performance of a program.
-type Metric func(expected, actual map[string]any) float64
+// OptimizeProgram is a helper function that optimizes a program using the provided optimizer.
+func OptimizeProgram(ctx context.Context, program *Program, optimizer Optimizer, dataset Dataset, metric Metric) (*Program, error) {
+	return optimizer.Compile(ctx, program, dataset, metric)
+}
+
+// Metric is a function that evaluates the quality of a program's output.
+type Metric func(ctx context.Context, result map[string]any) (bool, string)
 
 // Dataset represents a collection of examples for training/evaluation.
 type Dataset interface {
@@ -24,8 +29,8 @@ type Dataset interface {
 
 // Example represents a single training/evaluation example.
 type Example struct {
-	Inputs  map[string]any
-	Outputs map[string]any
+	Input  map[string]any
+	Output map[string]any
 }
 
 // BaseOptimizer provides a basic implementation of the Optimizer interface.
@@ -34,8 +39,8 @@ type BaseOptimizer struct {
 }
 
 // Compile is a placeholder implementation and should be overridden by specific optimizer implementations.
-func (bo *BaseOptimizer) Compile(ctx context.Context, program Program, dataset Dataset, metric Metric) (Program, error) {
-	return Program{}, errors.New("Compile method not implemented")
+func (bo *BaseOptimizer) Compile(ctx context.Context, program *Program, dataset Dataset, metric Metric) (*Program, error) {
+	return nil, errors.New("Compile method not implemented")
 }
 
 // OptimizerFactory is a function type for creating Optimizer instances.
@@ -102,7 +107,7 @@ func NewBootstrapFewShot(maxExamples int) *BootstrapFewShot {
 }
 
 // Compile implements the optimization logic for BootstrapFewShot.
-func (bfs *BootstrapFewShot) Compile(ctx context.Context, program Program, dataset Dataset, metric Metric) (Program, error) {
+func (bfs *BootstrapFewShot) Compile(ctx context.Context, program *Program, dataset Dataset, metric Metric) (*Program, error) {
 	// Implementation of bootstrap few-shot learning
 	// This is a placeholder and should be implemented based on the DSPy paper's description
 	return program, nil

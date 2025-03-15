@@ -17,12 +17,12 @@ type ReAct struct {
 	MaxIters int
 }
 
-func NewReAct(signature core.Signature, tools []core.Tool, maxIters int) *ReAct {
+func NewReAct(signature core.Signature, tools []core.Tool, maxIters int, config *core.DSPYConfig) *ReAct {
 	modifiedSignature := appendReActFields(signature)
-	predict := NewPredict(modifiedSignature)
+	predict := NewPredict(modifiedSignature, config)
 
 	return &ReAct{
-		BaseModule: *core.NewModule(modifiedSignature),
+		BaseModule: *core.NewModule(modifiedSignature, config),
 		Predict:    predict,
 		Tools:      tools,
 		MaxIters:   maxIters,
@@ -34,11 +34,6 @@ func (r *ReAct) WithDefaultOptions(opts ...core.Option) *ReAct {
 	// Simply delegate to the Predict module's WithDefaultOptions
 	r.Predict.WithDefaultOptions(opts...)
 	return r
-}
-
-func (r *ReAct) SetLLM(llm core.LLM) {
-	r.BaseModule.SetLLM(llm)
-	r.Predict.SetLLM(llm)
 }
 
 func (r *ReAct) Process(ctx context.Context, inputs map[string]any, opts ...core.Option) (map[string]any, error) {

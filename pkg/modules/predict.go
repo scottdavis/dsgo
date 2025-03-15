@@ -11,21 +11,24 @@ import (
 	"github.com/XiaoConstantine/dspy-go/pkg/errors"
 )
 
+// Predict implements a basic text generation module.
 type Predict struct {
 	core.BaseModule
 	Demos          []core.Example
-	LLM            core.LLM
 	defaultOptions *core.ModuleOptions
 }
 
 // Ensure Predict implements core.Module.
 var _ core.Module = (*Predict)(nil)
 
-func NewPredict(signature core.Signature) *Predict {
+// NewPredict creates a new Predict module with the given signature and config.
+func NewPredict(signature core.Signature, config *core.DSPYConfig) *Predict {
+	if config == nil {
+		config = core.NewDSPYConfig()
+	}
 	return &Predict{
-		BaseModule: *core.NewModule(signature),
+		BaseModule: *core.NewModule(signature, config),
 		Demos:      []core.Example{},
-		LLM:        core.GetDefaultLLM(),
 	}
 }
 
@@ -60,12 +63,18 @@ func (p *Predict) Process(ctx context.Context, inputs map[string]any, opts ...co
 			})
 	}
 
+	// Get LLM from config
+	llm := p.Config.DefaultLLM
+	if llm == nil {
+		return nil, errors.New(errors.ConfigurationError, "no default LLM configured")
+	}
+
 	signature := p.GetSignature()
 	prompt := formatPrompt(signature, p.Demos, inputs)
 
 	logger.Debug(ctx, "Generated prompt with prompt: %v", prompt)
 
-	resp, err := p.LLM.Generate(ctx, prompt, finalOptions.GenerateOptions...)
+	resp, err := llm.Generate(ctx, prompt, finalOptions.GenerateOptions...)
 	if err != nil {
 		span.WithError(err)
 		return nil, errors.WithFields(
@@ -73,7 +82,7 @@ func (p *Predict) Process(ctx context.Context, inputs map[string]any, opts ...co
 			errors.Fields{
 				"module": "Predict",
 				"prompt": prompt,
-				"model":  p.LLM,
+				"model":  llm,
 			})
 	}
 	logger.Debug(ctx, "LLM Completion: %v", resp.Content)
@@ -105,9 +114,9 @@ func (p *Predict) Process(ctx context.Context, inputs map[string]any, opts ...co
 
 func (p *Predict) Clone() core.Module {
 	return &Predict{
-		BaseModule: *p.BaseModule.Clone().(*core.BaseModule),
-		Demos:      append([]core.Example{}, p.Demos...),
-		LLM:        p.LLM,
+		BaseModule:     *p.BaseModule.Clone().(*core.BaseModule),
+		Demos:          append([]core.Example{}, p.Demos...),
+		defaultOptions: p.defaultOptions.Clone(),
 	}
 }
 
@@ -115,6 +124,7 @@ func (p *Predict) GetDemos() []core.Example {
 	return p.Demos
 }
 
+// formatPrompt creates a prompt from the signature, demonstrations, and inputs.
 func formatPrompt(signature core.Signature, demos []core.Example, inputs map[string]any) string {
 	var sb strings.Builder
 
@@ -140,10 +150,10 @@ func formatPrompt(signature core.Signature, demos []core.Example, inputs map[str
 	for _, demo := range demos {
 		sb.WriteString("---\n\n")
 		for _, field := range signature.Inputs {
-			sb.WriteString(fmt.Sprintf("%s: %v\n", field.Name, demo.Inputs[field.Name]))
+			sb.WriteString(fmt.Sprintf("%s: %v\n", field.Name, demo.Input[field.Name]))
 		}
 		for _, field := range signature.Outputs {
-			sb.WriteString(fmt.Sprintf("%s: %v\n", field.Name, demo.Outputs[field.Name]))
+			sb.WriteString(fmt.Sprintf("%s: %v\n", field.Name, demo.Output[field.Name]))
 		}
 		sb.WriteString("\n")
 	}
@@ -445,6 +455,27 @@ func (p *Predict) SetDemos(demos []core.Example) {
 	p.Demos = demos
 }
 
-func (p *Predict) SetLLM(llm core.LLM) {
-	p.LLM = llm
+// formatDemos formats the demonstrations for the prompt.
+func (p *Predict) formatDemos(ctx context.Context) string {
+	if len(p.Demos) == 0 {
+		return ""
+	}
+
+	var demoText strings.Builder
+	demoText.WriteString("\nHere are some examples:\n\n")
+
+	for i, demo := range p.Demos {
+		demoText.WriteString(fmt.Sprintf("Example %d:\n", i+1))
+		demoText.WriteString("Input:\n")
+		for k, v := range demo.Input {
+			demoText.WriteString(fmt.Sprintf("%s: %v\n", k, v))
+		}
+		demoText.WriteString("\nOutput:\n")
+		for k, v := range demo.Output {
+			demoText.WriteString(fmt.Sprintf("%s: %v\n", k, v))
+		}
+		demoText.WriteString("\n")
+	}
+
+	return demoText.String()
 }

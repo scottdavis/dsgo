@@ -125,6 +125,7 @@ type OrchestratorResult struct {
 type FlexibleOrchestrator struct {
 	memory     Memory
 	config     OrchestrationConfig
+	Config     *core.DSPYConfig
 	analyzer   *modules.Predict
 	processors map[string]TaskProcessor
 	parser     TaskParser
@@ -133,60 +134,51 @@ type FlexibleOrchestrator struct {
 }
 
 // NewFlexibleOrchestrator creates a new orchestrator instance.
-func NewFlexibleOrchestrator(memory Memory, config OrchestrationConfig) *FlexibleOrchestrator {
-	if config.AnalyzerConfig.BaseInstruction == "" {
-		config.AnalyzerConfig.BaseInstruction = `Analyze the given task and break it down into well-defined subtasks.
-
-	IMPORTANT FORMAT RULES:
-	1. Start fields exactly with 'analysis:' or 'tasks:' (no markdown formatting)
-	2. Provide raw XML directly after 'tasks:' without any wrapping
-	3. Keep the exact field prefix format - no decorations or modifications
-	4. Ensure proper indentation and structure in the XML.`
+func NewFlexibleOrchestrator(memory Memory, config OrchestrationConfig, dspyConfig *core.DSPYConfig) *FlexibleOrchestrator {
+	if dspyConfig == nil {
+		dspyConfig = core.NewDSPYConfig()
 	}
-	instruction := config.AnalyzerConfig.BaseInstruction
-	if config.AnalyzerConfig.FormatInstructions != "" {
-		instruction += "\n" + config.AnalyzerConfig.FormatInstructions
+	
+	// Set defaults
+	if config.MaxConcurrent <= 0 {
+		config.MaxConcurrent = 5 // Default to 5 concurrent tasks
 	}
-	if len(config.AnalyzerConfig.Considerations) > 0 {
-		instruction += "\nConsider:\n"
-		for _, consideration := range config.AnalyzerConfig.Considerations {
-			instruction += fmt.Sprintf("- %s\n", consideration)
+	if config.DefaultTimeout <= 0 {
+		config.DefaultTimeout = 60 * time.Second // Default to 60 seconds
+	}
+	if config.RetryConfig == nil {
+		config.RetryConfig = &RetryConfig{
+			MaxAttempts:       3,
+			BackoffMultiplier: 1.5,
 		}
 	}
-
 	if config.TaskParser == nil {
 		config.TaskParser = &DefaultTaskParser{}
 	}
 	if config.PlanCreator == nil {
 		config.PlanCreator = &DefaultPlanCreator{}
 	}
-	// Create analyzer with a flexible prompt that can adapt to different domains
-	analyzerSig := core.NewSignature(
-		[]core.InputField{
-			{Field: core.Field{Name: "task"}},
-			{Field: core.Field{Name: "context"}},
-		},
-		[]core.OutputField{
-			{Field: core.NewField("analysis")},
-			{Field: core.NewField("tasks")},
-		},
-	).WithInstruction(instruction)
 
-	orchestrator := &FlexibleOrchestrator{
+	orch := &FlexibleOrchestrator{
 		memory:     memory,
 		config:     config,
-		analyzer:   modules.NewPredict(analyzerSig),
+		Config:     dspyConfig,
 		processors: make(map[string]TaskProcessor),
 		parser:     config.TaskParser,
 		planner:    config.PlanCreator,
 	}
 
 	// Register custom processors
-	for procType, processor := range config.CustomProcessors {
-		orchestrator.RegisterProcessor(procType, processor)
+	if config.CustomProcessors != nil {
+		for pType, processor := range config.CustomProcessors {
+			orch.processors[pType] = processor
+		}
 	}
 
-	return orchestrator
+	// Create the task analyzer
+	orch.analyzer = orch.createTaskAnalyzer()
+
+	return orch
 }
 
 // RegisterProcessor adds a new task processor.
@@ -321,7 +313,7 @@ func (f *FlexibleOrchestrator) analyzeTasks(ctx context.Context, task string, co
 		result, err := f.analyzer.Process(ctx, map[string]any{
 			"task":    task,
 			"context": context,
-		}, f.config.Options)
+		})
 		if err != nil {
 			lastErr = err
 			attemptSpan.WithError(err)
@@ -523,4 +515,26 @@ func checkCtxErr(ctx context.Context) error {
 	default:
 		return nil
 	}
+}
+
+// createTaskAnalyzer creates a Predict module for task analysis.
+func (f *FlexibleOrchestrator) createTaskAnalyzer() *modules.Predict {
+	signature := core.NewSignature(
+		[]core.InputField{
+			{Field: core.Field{Name: "task"}},
+			{Field: core.Field{Name: "context"}},
+		},
+		[]core.OutputField{
+			{Field: core.NewField("analysis")},
+			{Field: core.NewField("subtasks")},
+		},
+	)
+
+	// Add instruction for task analysis
+	signature.Instruction = `Analyze the given task and break it down into subtasks. 
+For each subtask, provide a clear description and identify any dependencies.
+The 'subtasks' field should be a JSON array of objects, each with 'id', 'description', and 'dependencies' fields.
+Dependencies should be an array of subtask IDs that must be completed before this subtask.`
+
+	return modules.NewPredict(signature, f.Config)
 }

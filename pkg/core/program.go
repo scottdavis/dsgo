@@ -9,20 +9,31 @@ import (
 
 // Program represents a complete DSPy pipeline or workflow.
 type Program struct {
-	Modules map[string]Module
-	Forward func(ctx context.Context, inputs map[string]any) (map[string]any, error)
+	Modules        map[string]Module
+	Config         *DSPYConfig
+	Forward        func(ctx context.Context, inputs map[string]any) (map[string]any, error)
+	Demonstrations []Example
 }
 
 // NewProgram creates a new Program with the given modules and forward function.
-func NewProgram(modules map[string]Module, forward func(context.Context, map[string]any) (map[string]any, error)) Program {
-	return Program{
-		Modules: modules,
-		Forward: forward,
+func NewProgram(
+	modules map[string]Module,
+	forward func(context.Context, map[string]any) (map[string]any, error),
+	config *DSPYConfig,
+) *Program {
+	if config == nil {
+		config = NewDSPYConfig()
+	}
+	return &Program{
+		Modules:        modules,
+		Forward:        forward,
+		Config:         config,
+		Demonstrations: []Example{},
 	}
 }
 
 // Execute runs the program with the given inputs.
-func (p Program) Execute(ctx context.Context, inputs map[string]any) (map[string]any, error) {
+func (p *Program) Execute(ctx context.Context, inputs map[string]any) (map[string]any, error) {
 	if p.Forward == nil {
 		return nil, errors.New("forward function is not defined")
 	}
@@ -47,7 +58,7 @@ func (p Program) Execute(ctx context.Context, inputs map[string]any) (map[string
 
 // GetSignature returns the overall signature of the program
 // This would need to be defined based on the Forward function's expected inputs and outputs.
-func (p Program) GetSignature() Signature {
+func (p *Program) GetSignature() Signature {
 	var inputs []InputField
 	var outputs []OutputField
 
@@ -63,20 +74,26 @@ func (p Program) GetSignature() Signature {
 }
 
 // Clone creates a deep copy of the Program.
-func (p Program) Clone() Program {
+func (p *Program) Clone() *Program {
 	modulesCopy := make(map[string]Module)
 	for name, module := range p.Modules {
 		modulesCopy[name] = module.Clone()
 	}
 
-	return Program{
-		Modules: modulesCopy,
-		Forward: p.Forward, // Note: We're copying the pointer to the forward function
+	// Copy demonstrations
+	demosCopy := make([]Example, len(p.Demonstrations))
+	copy(demosCopy, p.Demonstrations)
+
+	return &Program{
+		Modules:        modulesCopy,
+		Forward:        p.Forward, // Note: We're copying the pointer to the forward function
+		Config:         p.Config,  // Note: This is a shallow copy
+		Demonstrations: demosCopy,
 	}
 }
 
 // Equal checks if two Programs are equivalent.
-func (p Program) Equal(other Program) bool {
+func (p *Program) Equal(other *Program) bool {
 	if p.Forward == nil && other.Forward != nil || p.Forward != nil && other.Forward == nil {
 		return false
 	}
@@ -92,6 +109,17 @@ func (p Program) Equal(other Program) bool {
 			return false
 		}
 	}
+	
+	// Compare demonstrations
+	if len(p.Demonstrations) != len(other.Demonstrations) {
+		return false
+	}
+	for i, demo := range p.Demonstrations {
+		if !reflect.DeepEqual(demo, other.Demonstrations[i]) {
+			return false
+		}
+	}
+	
 	return true
 }
 

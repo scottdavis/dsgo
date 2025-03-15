@@ -13,10 +13,10 @@ type ChainOfThought struct {
 // Ensure ChainOfThought implements Composable.
 var _ core.Composable = (*ChainOfThought)(nil)
 
-func NewChainOfThought(signature core.Signature) *ChainOfThought {
+func NewChainOfThought(signature core.Signature, config *core.DSPYConfig) *ChainOfThought {
 	modifiedSignature := appendRationaleField(signature)
 	return &ChainOfThought{
-		Predict: NewPredict(modifiedSignature),
+		Predict: NewPredict(modifiedSignature, config),
 	}
 }
 
@@ -46,15 +46,12 @@ func (c *ChainOfThought) GetSignature() core.Signature {
 	return c.Predict.GetSignature()
 }
 
-func (c *ChainOfThought) SetLLM(llm core.LLM) {
-	c.Predict.SetLLM(llm)
-}
-
 func (c *ChainOfThought) Clone() core.Module {
 	return &ChainOfThought{
 		Predict: c.Predict.Clone().(*Predict),
 	}
 }
+
 func (c *ChainOfThought) Compose(next core.Module) core.Module {
 	return &core.ModuleChain{
 		Modules: []core.Module{c, next},
@@ -72,6 +69,7 @@ func (c *ChainOfThought) SetSubModules(modules []core.Module) {
 		}
 	}
 }
+
 func appendRationaleField(signature core.Signature) core.Signature {
 	newSignature := signature
 	rationaleField := core.OutputField{

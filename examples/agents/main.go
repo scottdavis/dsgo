@@ -11,22 +11,23 @@ import (
 
 	"github.com/XiaoConstantine/dspy-go/pkg/agents"
 	"github.com/XiaoConstantine/dspy-go/pkg/core"
-	"github.com/XiaoConstantine/dspy-go/pkg/llms"
 	"github.com/XiaoConstantine/dspy-go/pkg/modules"
 
+	"github.com/XiaoConstantine/dspy-go/examples/utils"
 	workflows "github.com/XiaoConstantine/dspy-go/pkg/agents/workflows"
+	"github.com/XiaoConstantine/dspy-go/pkg/llms"
 	"github.com/XiaoConstantine/dspy-go/pkg/logging"
 )
 
-func RunChainExample(ctx context.Context, logger *logging.Logger) {
+func RunChainExample(ctx context.Context, logger *logging.Logger, dspyConfig *core.DSPYConfig) {
 	logger.Info(ctx, "============ Example 1: Chain workflow for structured data extraction and formatting ==============")
-	dataWorkflow, err := CreateDataProcessingWorkflow()
+	dataWorkflow, err := CreateDataProcessingWorkflow(dspyConfig)
 	if err != nil {
 		logger.Error(ctx, "Failed to create data workflow: %v", err)
 	}
 
 	report := `Q3 Performance Summary:Our customer satisfaction score rose to 92 points this quarter.Revenue grew by 45% compared to last year.Market share is now at 23% in our primary market.Customer churn decreased to 5% from 8%.New user acquisition cost is $43 per user.Product adoption rate increased to 78%.Employee satisfaction is at 87 points.Operating margin improved to 34%.`
-	result, err := dataWorkflow.Execute(ctx, map[string]interface{}{
+	result, err := dataWorkflow.Execute(ctx, map[string]any{
 		"raw_text": report,
 	})
 	if err != nil {
@@ -37,7 +38,7 @@ func RunChainExample(ctx context.Context, logger *logging.Logger) {
 		// clean up any extra whitespace
 		lines := strings.Split(strings.TrimSpace(table), "\n")
 		for _, line := range lines {
-			logger.Info(ctx, strings.TrimSpace(line))
+			logger.Info(ctx, "%s", strings.TrimSpace(line))
 		}
 	} else {
 		logger.Error(ctx, "invalid table format in result")
@@ -45,7 +46,7 @@ func RunChainExample(ctx context.Context, logger *logging.Logger) {
 	logger.Info(ctx, "================================================================================")
 }
 
-func RunParallelExample(ctx context.Context, logger *logging.Logger) {
+func RunParallelExample(ctx context.Context, logger *logging.Logger, config *core.DSPYConfig) {
 	logger.Info(ctx, "============ Example 2: Parallelization workflow for stakeholder impact analysis ==============")
 	stakeholders := []string{
 		`customers:
@@ -68,7 +69,11 @@ func RunParallelExample(ctx context.Context, logger *logging.Logger) {
 	       - price pressures
 	       - tech transitions`,
 	}
-	workflow, inputs, err := CreateParallelWorkflow(stakeholders)
+	workflow, inputs, err := CreateParallelWorkflow(stakeholders, config)
+	if err != nil {
+		logger.Error(ctx, "Failed to create parallel workflow: %v", err)
+		return
+	}
 	logger.Info(ctx, "Inputs: %v", inputs)
 	results, err := workflow.Execute(ctx, inputs)
 	if err != nil {
@@ -85,7 +90,7 @@ func RunParallelExample(ctx context.Context, logger *logging.Logger) {
 	logger.Info(ctx, "=================================================")
 }
 
-func RunRouteExample(ctx context.Context, logger *logging.Logger) {
+func RunRouteExample(ctx context.Context, logger *logging.Logger, dspyConfig *core.DSPYConfig) {
 	logger.Info(ctx, "============ Example 3: Route workflow for customer support ticket handling ==============")
 
 	supportRoutes := map[string]string{
@@ -144,10 +149,10 @@ func RunRouteExample(ctx context.Context, logger *logging.Logger) {
 		Best regards,
 		Mike`,
 	}
-	router := CreateRouterWorkflow()
+	router := CreateRouterWorkflow(dspyConfig)
 
 	for routeType, prompt := range supportRoutes {
-		routeStep := CreateHandlerStep(routeType, prompt)
+		routeStep := CreateHandlerStep(routeType, prompt, dspyConfig)
 		if err := router.AddStep(routeStep); err != nil {
 			logger.Error(ctx, "Failed to add step %s: %v", routeType, err)
 			continue
@@ -159,23 +164,22 @@ func RunRouteExample(ctx context.Context, logger *logging.Logger) {
 	logger.Info(ctx, "Processing support tickets...\n")
 	for i, ticket := range tickets {
 		logger.Info(ctx, "\nTicket %d:\n", i+1)
-		logger.Info(ctx, strings.Repeat("-", 40))
-		logger.Info(ctx, ticket)
+		logger.Info(ctx, "%s", strings.Repeat("-", 40))
+		logger.Info(ctx, "%s", ticket)
 		logger.Info(ctx, "\nResponse:")
-		logger.Info(ctx, strings.Repeat("-", 40))
+		logger.Info(ctx, "%s", strings.Repeat("-", 40))
 
 		response, err := router.Execute(ctx, map[string]interface{}{"input": ticket})
 		if err != nil {
 			logger.Info(ctx, "Error processing ticket %d: %v", i+1, err)
 			continue
 		}
-		logger.Info(ctx, response["response"].(string))
+		logger.Info(ctx, "%s", response["response"].(string))
 	}
 	logger.Info(ctx, "=================================================")
-
 }
 
-func RunEvalutorOptimizerExample(ctx context.Context, logger *logging.Logger) {
+func RunEvalutorOptimizerExample(ctx context.Context, logger *logging.Logger, config *core.DSPYConfig) {
 	// Create signature for our task - simpler now that we don't need dataset support
 	signature := core.NewSignature(
 		[]core.InputField{
@@ -192,7 +196,7 @@ func RunEvalutorOptimizerExample(ctx context.Context, logger *logging.Logger) {
     `)
 
 	// Create predict module with the signature
-	predict := modules.NewPredict(signature)
+	predict := modules.NewPredict(signature, config)
 
 	// Create program that uses predict module
 	program := core.NewProgram(
@@ -200,6 +204,7 @@ func RunEvalutorOptimizerExample(ctx context.Context, logger *logging.Logger) {
 		func(ctx context.Context, inputs map[string]interface{}) (map[string]interface{}, error) {
 			return predict.Process(ctx, inputs)
 		},
+		config,
 	)
 
 	// Create evaluation metric that matches Python implementation
@@ -263,25 +268,39 @@ func RunEvalutorOptimizerExample(ctx context.Context, logger *logging.Logger) {
 	}
 }
 
-func RunOrchestratorExample(ctx context.Context, logger *logging.Logger) {
-	xmlFormat := `Format the tasks section in XML with the following structure:
+func RunOrchestratorExample(ctx context.Context, logger *logging.Logger, dspyConfig *core.DSPYConfig) {
+	// Provide a more detailed XML example to help the LLM generate correct format
+	xmlFormat := `Format the tasks section in XML with the following structure EXACTLY as shown:
     <tasks>
-        <task id="task_1" type="analysis" processor="example" priority="1">
-            <description>Task description here</description>
+        <task id="task_1" type="analysis" processor="general" priority="1">
+            <description>Analyze input data</description>
             <dependencies></dependencies>
             <metadata>
                 <item key="resource">cpu</item>
             </metadata>
         </task>
-    </tasks>`
+        <task id="task_2" type="formatting" processor="general" priority="2">
+            <description>Format results into report</description>
+            <dependencies>
+                <dependency>task_1</dependency>
+            </dependencies>
+            <metadata>
+                <item key="output">report</item>
+            </metadata>
+        </task>
+    </tasks>
+    
+    Keep your XML well-formed with proper closing tags for every opening tag.
+    Every task MUST have an id, type, and processor attribute.`
+	
 	parser := &agents.XMLTaskParser{
 		RequiredFields: []string{"id", "type", "processor"},
 	}
 
 	planner := agents.NewDependencyPlanCreator(5) // Max 5 tasks per phase
 
-	// Create orchestrator configuration
-	config := agents.OrchestrationConfig{
+	// Create orchestrator configuration (separate from DSPYConfig)
+	orchConfig := agents.OrchestrationConfig{
 		MaxConcurrent:  3,
 		DefaultTimeout: 30 * time.Second,
 		RetryConfig: &agents.RetryConfig{
@@ -305,37 +324,54 @@ func RunOrchestratorExample(ctx context.Context, logger *logging.Logger) {
 			},
 		},
 		Options: core.WithGenerateOptions(
-			core.WithTemperature(0.3),
+			core.WithTemperature(0.2), // Lower temperature for more precise XML generation
 			core.WithMaxTokens(8192),
 		),
 	}
 
 	// Create orchestrator
-	orchestrator := agents.NewFlexibleOrchestrator(agents.NewInMemoryStore(), config)
+	orchestrator := agents.NewFlexibleOrchestrator(agents.NewInMemoryStore(), orchConfig, dspyConfig)
 
 	// The analyzer will return tasks in XML format that our parser understands
-	task := "Your high-level task description"
-	context := map[string]interface{}{
+	task := "Create a summary report of quarterly sales data, identifying top products and regional performance trends"
+	contextData := map[string]interface{}{
 		"key": "value",
 	}
 
 	// Process the task
 	ctx = core.WithExecutionState(ctx)
-	result, err := orchestrator.Process(ctx, task, context)
+	result, err := orchestrator.Process(ctx, task, contextData)
 	if err != nil {
 		logger.Error(ctx, "Orchestration failed: %v", err)
-		// Log more details about failed tasks
-		for taskID, taskErr := range result.FailedTasks {
-			logger.Error(ctx, "Task %s failed: %v", taskID, taskErr)
+		// Safe handling of results to avoid nil pointer panic
+		if result != nil {
+			// Log more details about failed tasks
+			for taskID, taskErr := range result.FailedTasks {
+				logger.Error(ctx, "Task %s failed: %v", taskID, taskErr)
+			}
+			
+			// Log successful tasks with details
+			for taskID, taskResult := range result.CompletedTasks {
+				logger.Info(ctx, "Task %s completed successfully with result: %v", taskID, taskResult)
+			}
+			
+			// Handle results
+			logger.Info(ctx, "Orchestration completed with %d successful tasks and %d failures",
+				len(result.CompletedTasks), len(result.FailedTasks))
+		} else {
+			logger.Error(ctx, "No result returned from orchestrator")
 		}
+		return
 	}
+	
+	// Only try to access results if there was no error
 	// Log successful tasks with details
 	for taskID, taskResult := range result.CompletedTasks {
 		logger.Info(ctx, "Task %s completed successfully with result: %v", taskID, taskResult)
 	}
 
 	// Handle results
-	logger.Info(ctx, "Orchestration completed with %d successful tasks and %d failures\n",
+	logger.Info(ctx, "Orchestration completed with %d successful tasks and %d failures",
 		len(result.CompletedTasks), len(result.FailedTasks))
 }
 
@@ -362,20 +398,22 @@ func main() {
 	logger.Info(ctx, "Starting application")
 	logger.Debug(ctx, "This is a debug message")
 	logger.Warn(ctx, "This is a warning message")
-	llms.EnsureFactory()
-	err = core.ConfigureDefaultLLM(*apiKey, core.ModelID("ollama:gemma3:4b"))
-	if err != nil {
-		logger.Error(ctx, "Failed to configure LLM: %v", err)
-	}
 
-	RunChainExample(ctx, logger)
-	RunParallelExample(ctx, logger)
-	RunRouteExample(ctx, logger)
-	RunEvalutorOptimizerExample(ctx, logger)
-	RunOrchestratorExample(ctx, logger)
+	// Create an Ollama configuration with custom host and model
+	ollamaConfig := llms.NewOllamaConfig("http://192.168.1.199:11434", "gemma3:27b")
+	
+	// Use the Ollama configuration to create an LLM
+	dspyConfig := utils.SetupLLM(*apiKey, ollamaConfig)
+
+	// Pass the config to all example functions
+	RunChainExample(ctx, logger, dspyConfig)
+	RunParallelExample(ctx, logger, dspyConfig)
+	RunRouteExample(ctx, logger, dspyConfig)
+	RunEvalutorOptimizerExample(ctx, logger, dspyConfig)
+	RunOrchestratorExample(ctx, logger, dspyConfig)
 }
 
-func CreateClassifierStep() *workflows.Step {
+func CreateClassifierStep(dspyConfig *core.DSPYConfig) *workflows.Step {
 	// Create a signature for classification that captures reasoning and selection
 	signature := core.NewSignature(
 		[]core.InputField{
@@ -390,8 +428,9 @@ func CreateClassifierStep() *workflows.Step {
     First explain your reasoning, then provide your selection.
     You must classify the ticket into exactly one of these categories: "billing", "technical", "account", or "product".
     Do not use any other classification values.`)
+	
 	// Create a specialized predict module that formats the response correctly
-	predictModule := modules.NewPredict(signature)
+	predictModule := modules.NewPredict(signature, dspyConfig)
 
 	return &workflows.Step{
 		ID:     "support_classifier",
@@ -399,7 +438,7 @@ func CreateClassifierStep() *workflows.Step {
 	}
 }
 
-func CreateHandlerStep(routeType string, prompt string) *workflows.Step {
+func CreateHandlerStep(routeType string, prompt string, dspyConfig *core.DSPYConfig) *workflows.Step {
 	// Create signature for handling tickets
 	signature := core.NewSignature(
 		[]core.InputField{
@@ -412,16 +451,16 @@ func CreateHandlerStep(routeType string, prompt string) *workflows.Step {
 
 	return &workflows.Step{
 		ID:     fmt.Sprintf("%s_handler", routeType),
-		Module: modules.NewPredict(signature),
+		Module: modules.NewPredict(signature, dspyConfig),
 	}
 }
 
-func CreateRouterWorkflow() *workflows.RouterWorkflow {
-	routerWorkflow := workflows.NewRouterWorkflow(agents.NewInMemoryStore(), CreateClassifierStep())
+func CreateRouterWorkflow(dspyConfig *core.DSPYConfig) *workflows.RouterWorkflow {
+	routerWorkflow := workflows.NewRouterWorkflow(agents.NewInMemoryStore(), CreateClassifierStep(dspyConfig))
 	return routerWorkflow
 }
 
-func CreateParallelWorkflow(stakeholders []string) (*workflows.ParallelWorkflow, map[string]interface{}, error) {
+func CreateParallelWorkflow(stakeholders []string, dspyConfig *core.DSPYConfig) (*workflows.ParallelWorkflow, map[string]interface{}, error) {
 	// Create a new parallel workflow with in-memory storage
 	workflow := workflows.NewParallelWorkflow(agents.NewInMemoryStore(), 3)
 	inputs := make(map[string]interface{})
@@ -429,11 +468,11 @@ func CreateParallelWorkflow(stakeholders []string) (*workflows.ParallelWorkflow,
 	for i, stakeholder := range stakeholders {
 		step := &workflows.Step{
 			ID:     fmt.Sprintf("analyze_stakeholder_%d", i),
-			Module: NewStakeholderAnalysis(i),
+			Module: NewStakeholderAnalysis(i, dspyConfig),
 		}
 
 		if err := workflow.AddStep(step); err != nil {
-			return nil, nil, fmt.Errorf("Failed to add step: %v", err)
+			return nil, nil, fmt.Errorf("failed to add step: %v", err)
 		}
 		inputKey := fmt.Sprintf("analyze_stakeholder_%d_stakeholder_info", i)
 		logging.GetLogger().Info(context.Background(), "input key: %s", inputKey)
@@ -442,10 +481,9 @@ func CreateParallelWorkflow(stakeholders []string) (*workflows.ParallelWorkflow,
 	}
 
 	return workflow, inputs, nil
-
 }
 
-func NewStakeholderAnalysis(index int) core.Module {
+func NewStakeholderAnalysis(index int, dspyConfig *core.DSPYConfig) core.Module {
 	signature := core.NewSignature(
 		[]core.InputField{
 			{Field: core.Field{Name: fmt.Sprintf("analyze_stakeholder_%d_stakeholder_info", index)}},
@@ -457,10 +495,10 @@ func NewStakeholderAnalysis(index int) core.Module {
         Provide specific impacts and recommended actions.
         Format with clear sections and priorities.`)
 
-	return modules.NewPredict(signature)
+	return modules.NewPredict(signature, dspyConfig)
 }
 
-func CreateDataProcessingWorkflow() (*workflows.ChainWorkflow, error) {
+func CreateDataProcessingWorkflow(dspyConfig *core.DSPYConfig) (*workflows.ChainWorkflow, error) {
 	// Create a new chain workflow with in-memory storage
 	workflow := workflows.NewChainWorkflow(agents.NewInMemoryStore())
 
@@ -475,7 +513,7 @@ func CreateDataProcessingWorkflow() (*workflows.ChainWorkflow, error) {
         45%: revenue growth`)
 	extractStep := &workflows.Step{
 		ID:     "extract_numbers",
-		Module: modules.NewPredict(extractSignature),
+		Module: modules.NewPredict(extractSignature, dspyConfig),
 	}
 
 	// Step 2: Standardize to percentages
@@ -493,7 +531,7 @@ func CreateDataProcessingWorkflow() (*workflows.ChainWorkflow, error) {
 
 	standardizeStep := &workflows.Step{
 		ID:     "standardize_values",
-		Module: modules.NewPredict(standardizeSignature),
+		Module: modules.NewPredict(standardizeSignature, dspyConfig),
 	}
 
 	// Step 3: Sort values
@@ -505,7 +543,7 @@ func CreateDataProcessingWorkflow() (*workflows.ChainWorkflow, error) {
 		`)
 	sortStep := &workflows.Step{
 		ID:     "sort_values",
-		Module: modules.NewPredict(sortSignature),
+		Module: modules.NewPredict(sortSignature, dspyConfig),
 	}
 
 	// Step 4: Format as table
@@ -522,7 +560,7 @@ Format example:
 | Customer Satisfaction | 92% |`)
 	tableStep := &workflows.Step{
 		ID:     "format_table",
-		Module: modules.NewPredict(tableSignature),
+		Module: modules.NewPredict(tableSignature, dspyConfig),
 	}
 
 	// Add steps to workflow
@@ -565,10 +603,10 @@ func NewPromptingOptimizer(
 
 func (o *PromptingOptimizer) Compile(
 	ctx context.Context,
-	program core.Program,
+	program *core.Program,
 	dataset core.Dataset, // Kept for interface compatibility but not used
 	metric core.Metric, // Kept for interface compatibility but not used
-) (core.Program, error) {
+) (*core.Program, error) {
 	ctx, span := core.StartSpan(ctx, "PromptingOptimization")
 	defer core.EndSpan(ctx)
 
@@ -646,10 +684,10 @@ func (p *ExampleProcessor) Process(ctx context.Context, task agents.Task, taskCo
 	switch task.Type {
 	case "analysis":
 		return p.handleAnalysisTask(task, taskContext)
-	case "decomposition":
-		return p.handleDecompositionTask(task, taskContext)
 	case "formatting":
 		return p.handleFormattingTask(task, taskContext)
+	case "decomposition":
+		return p.handleDecompositionTask(task, taskContext)
 	default:
 		// Instead of returning an error, let's handle any task type
 		return p.handleGenericTask(task, taskContext)
@@ -658,24 +696,92 @@ func (p *ExampleProcessor) Process(ctx context.Context, task agents.Task, taskCo
 
 func (p *ExampleProcessor) handleAnalysisTask(task agents.Task, taskContext map[string]interface{}) (interface{}, error) {
 	// Simulate analysis work
-	result := fmt.Sprintf("Completed analysis for: %s", task.Metadata)
+	result := map[string]interface{}{
+		"status":      "completed",
+		"analysis":    "Sample analysis of quarterly data",
+		"top_products": []string{"Product A", "Product B", "Product C"},
+		"trends": map[string]string{
+			"north": "increasing",
+			"south": "stable",
+			"east":  "declining",
+			"west":  "rapidly increasing",
+		},
+	}
 	return result, nil
 }
 
 func (p *ExampleProcessor) handleDecompositionTask(task agents.Task, taskContext map[string]interface{}) (interface{}, error) {
 	// Simulate decomposition work
-	result := fmt.Sprintf("Decomposed task: %s", task.Metadata)
+	result := map[string]interface{}{
+		"status":       "completed",
+		"subtasks":     []string{"data collection", "data cleaning", "analysis", "reporting"},
+		"dependencies": []string{"data availability", "team allocation"},
+	}
 	return result, nil
 }
 
 func (p *ExampleProcessor) handleFormattingTask(task agents.Task, taskContext map[string]interface{}) (interface{}, error) {
-	// Simulate formatting work
-	result := fmt.Sprintf("Formatted output for: %s", task.Metadata)
-	return result, nil
+	// Check for dependencies in the task context
+	var analysisResult map[string]interface{}
+	
+	// Look for analysis results from other tasks
+	for taskID, result := range taskContext {
+		if strings.Contains(taskID, "analysis") {
+			if resultMap, ok := result.(map[string]interface{}); ok {
+				analysisResult = resultMap
+				break
+			}
+		}
+	}
+	
+	// Generate report based on analysis or with placeholder data if not found
+	report := ""
+	if analysisResult != nil {
+		report = "# Quarterly Sales Report\n\n"
+		
+		// Add top products if available
+		if products, ok := analysisResult["top_products"].([]string); ok && len(products) > 0 {
+			report += "## Top Performing Products\n"
+			for i, product := range products {
+				report += fmt.Sprintf("%d. %s\n", i+1, product)
+			}
+			report += "\n"
+		}
+		
+		// Add trends if available
+		if trends, ok := analysisResult["trends"].(map[string]string); ok && len(trends) > 0 {
+			report += "## Regional Trends\n"
+			for region, trend := range trends {
+				report += fmt.Sprintf("- %s: %s\n", region, trend)
+			}
+		}
+	} else {
+		// If no analysis data, create a placeholder report
+		report = "# Quarterly Sales Report\n\n"
+		report += "## Overview\n"
+		report += "This is a placeholder report as analysis data was not available.\n\n"
+		report += "## Recommendations\n"
+		report += "- Conduct detailed analysis\n"
+		report += "- Gather more data\n"
+		report += "- Schedule follow-up meeting\n"
+	}
+	
+	// Return formatted report
+	return map[string]interface{}{
+		"status": "completed",
+		"report": report,
+		"format": "markdown",
+	}, nil
 }
 
 func (p *ExampleProcessor) handleGenericTask(task agents.Task, taskContext map[string]interface{}) (interface{}, error) {
 	// Handle any other task type
-	result := fmt.Sprintf("Processed task %s: %s", task.ID, task.Metadata)
+	result := map[string]interface{}{
+		"status":     "completed",
+		"task_id":    task.ID,
+		"task_type":  task.Type,
+		"message":    fmt.Sprintf("Processed generic task %s", task.ID),
+		"created_at": time.Now().Format(time.RFC3339),
+	}
 	return result, nil
 }

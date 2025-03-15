@@ -2,35 +2,40 @@ package optimizers
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"sync"
 	"sync/atomic"
 
 	"github.com/XiaoConstantine/dspy-go/pkg/core"
-	"github.com/XiaoConstantine/dspy-go/pkg/errors"
-	"github.com/XiaoConstantine/dspy-go/pkg/modules"
 	"github.com/sourcegraph/conc/pool"
 )
 
 type BootstrapFewShot struct {
 	Metric          func(example map[string]any, prediction map[string]any, ctx context.Context) bool
 	MaxBootstrapped int
+	Config          *core.DSPYConfig
 }
 
-func NewBootstrapFewShot(metric func(example map[string]any, prediction map[string]any, ctx context.Context) bool, maxBootstrapped int) *BootstrapFewShot {
+func NewBootstrapFewShot(metric func(example map[string]any, prediction map[string]any, ctx context.Context) bool, maxBootstrapped int, config *core.DSPYConfig) *BootstrapFewShot {
+	if config == nil {
+		config = core.NewDSPYConfig()
+	}
 	return &BootstrapFewShot{
 		Metric:          metric,
 		MaxBootstrapped: maxBootstrapped,
+		Config:          config,
 	}
 }
 
-func (b *BootstrapFewShot) Compile(ctx context.Context, student, teacher core.Program, trainset []map[string]any) (core.Program, error) {
+func (b *BootstrapFewShot) Compile(ctx context.Context, student, teacher *core.Program, trainset []map[string]any) (*core.Program, error) {
 	compiledStudent := student.Clone()
-	teacherLLM := core.GetTeacherLLM()
+	
+	// Use the teacher LLM from config if available, otherwise use default LLM
+	teacherLLM := b.Config.TeacherLLM
 	if teacherLLM == nil {
-		teacherLLM = core.GetDefaultLLM()
+		teacherLLM = b.Config.DefaultLLM
 	}
+	
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -39,7 +44,7 @@ func (b *BootstrapFewShot) Compile(ctx context.Context, student, teacher core.Pr
 	}
 
 	ctx = core.WithExecutionState(ctx)
-	ctx, span := core.StartSpan(ctx, "Compilation")
+	ctx, _ = core.StartSpan(ctx, "Compilation")
 
 	defer core.EndSpan(ctx)
 
@@ -49,155 +54,104 @@ func (b *BootstrapFewShot) Compile(ctx context.Context, student, teacher core.Pr
 			demo core.Example
 			ctx  context.Context
 		}
-		processed int32
-		errCh     = make(chan error, 1)
+		numProcessed int32
 	)
-	examplesNeeded := b.MaxBootstrapped
-	if examplesNeeded > len(trainset) {
-		examplesNeeded = len(trainset)
+
+	// Check if we already have enough bootstrapped demonstrations
+	if b.enoughBootstrappedDemos(compiledStudent) {
+		return compiledStudent, nil
 	}
 
-	p := pool.New().WithMaxGoroutines(core.GlobalConfig.ConcurrencyLevel)
+	// Process examples in parallel
+	p := pool.New().WithMaxGoroutines(10)
 
-	for i := 0; i < examplesNeeded; i++ {
-		if b.enoughBootstrappedDemos(compiledStudent) {
-			log.Println("Enough bootstrapped demos, breaking loop")
-			break
-		}
-
-		ex := trainset[i]
+	for _, example := range trainset {
+		example := example // Capture for goroutine
 		p.Go(func() {
-			exampleCtx, exampleSpan := core.StartSpan(ctx, "Example")
+			exampleCtx, exampleSpan := core.StartSpan(ctx, "ProcessExample")
 			defer core.EndSpan(exampleCtx)
 
-			exampleSpan.WithAnnotation("Example", ex)
-			prediction, err := b.predictWithTeacher(ctx, teacher, teacherLLM, ex)
+			// Try to predict with the student program
+			studentPrediction, err := compiledStudent.Execute(exampleCtx, example)
 			if err != nil {
 				exampleSpan.WithError(err)
-				select {
-				case errCh <- err:
-				default:
-				}
+				log.Printf("Error executing student program: %v", err)
 				return
 			}
-			exampleSpan.WithAnnotation("prediction", prediction)
 
-			if b.Metric(ex, prediction, exampleCtx) {
-				resultsMu.Lock()
-				results = append(results, struct {
-					demo core.Example
-					ctx  context.Context
-				}{
-					demo: core.Example{
-						Inputs:  ex,
-						Outputs: prediction,
-					},
-					ctx: exampleCtx,
-				})
-				resultsMu.Unlock()
+			// Check if the student's prediction is correct
+			if b.Metric(example, studentPrediction, exampleCtx) {
+				return // Student already gets this example right
 			}
 
-			atomic.AddInt32(&processed, 1)
+			// Get the teacher's prediction
+			teacherPrediction, err := b.predictWithTeacher(exampleCtx, teacher, teacherLLM, example)
+			if err != nil {
+				exampleSpan.WithError(err)
+				log.Printf("Error executing teacher program: %v", err)
+				return
+			}
+
+			// Check if the teacher's prediction is correct
+			if !b.Metric(example, teacherPrediction, exampleCtx) {
+				return // Teacher also gets this wrong, skip
+			}
+
+			// Create a demonstration from this example
+			demo := core.Example{
+				Input:  example,
+				Output: teacherPrediction,
+			}
+
+			resultsMu.Lock()
+			results = append(results, struct {
+				demo core.Example
+				ctx  context.Context
+			}{demo, exampleCtx})
+			resultsMu.Unlock()
+
+			atomic.AddInt32(&numProcessed, 1)
 		})
 	}
 
 	p.Wait()
 
-	select {
-	case err := <-errCh:
-		span.WithError(err)
-		return compiledStudent, fmt.Errorf("error during compilation: %w", err)
-	default:
-	}
-
+	// Add demonstrations to the program
 	for _, result := range results {
 		if err := b.addDemonstrations(compiledStudent, result.demo, result.ctx); err != nil {
-			span.WithError(err)
-			return compiledStudent, fmt.Errorf("error adding demonstrations: %w", err)
+			return compiledStudent, err
 		}
+
+		// Check if we have enough demonstrations
 		if b.enoughBootstrappedDemos(compiledStudent) {
 			break
 		}
 	}
 
-	span.WithAnnotation("compiledStudent", compiledStudent)
 	return compiledStudent, nil
 }
 
-func (b *BootstrapFewShot) predictWithTeacher(ctx context.Context, teacher core.Program, teacherLLM core.LLM, example map[string]any) (map[string]any, error) {
-	// Clone the teacher program and set its LLM to the teacher LLM
+func (b *BootstrapFewShot) predictWithTeacher(ctx context.Context, teacher *core.Program, teacherLLM core.LLM, example map[string]any) (map[string]any, error) {
+	// Create a temporary config with the teacher LLM
+	tempConfig := core.NewDSPYConfig().WithDefaultLLM(teacherLLM)
+	
+	// Set the config on the teacher program
 	teacherClone := teacher.Clone()
-	for _, module := range teacherClone.Modules {
-		if predictor, ok := module.(interface{ SetLLM(core.LLM) }); ok {
-			predictor.SetLLM(teacherLLM)
-		}
-	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
-
-	ctx = core.WithExecutionState(ctx)
-	ctx, span := core.StartSpan(ctx, "TeacherPrediction")
-	defer core.EndSpan(ctx)
-
-	span.WithAnnotation("Example", example)
-	outputs, err := teacherClone.Execute(ctx, example)
-	if err != nil {
-		span.WithError(err)
-		return nil, err
-	}
-
-	span.WithAnnotation("outputs", outputs)
-	return outputs, nil
-
+	teacherClone.Config = tempConfig
+	
+	// Execute the teacher program
+	return teacherClone.Execute(ctx, example)
 }
 
-func (b *BootstrapFewShot) enoughBootstrappedDemos(program core.Program) bool {
-	for _, module := range program.Modules {
-		if predictor, ok := module.(interface{ GetDemos() []core.Example }); ok {
-			if len(predictor.GetDemos()) < b.MaxBootstrapped {
-				return false
-			}
-		}
+func (b *BootstrapFewShot) enoughBootstrappedDemos(program *core.Program) bool {
+	if b.MaxBootstrapped <= 0 {
+		return false
 	}
-	return true
+
+	return len(program.Demonstrations) >= b.MaxBootstrapped
 }
 
-func (b *BootstrapFewShot) addDemonstrations(program core.Program, demo core.Example, ctx context.Context) error {
-	if ctx == nil {
-		return errors.New(errors.InvalidInput, "cannot add demonstrations: context is nil")
-	}
-
-	ctx, span := core.StartSpan(ctx, "AddDemonstrations")
-	defer core.EndSpan(ctx)
-	span.WithAnnotation("demo_inputs", demo.Inputs)
-	span.WithAnnotation("demo_outputs", demo.Outputs)
-	for moduleName, module := range program.Modules {
-		predictor, ok := module.(*modules.Predict)
-		if !ok {
-			continue
-		}
-
-		currentDemos := predictor.GetDemos()
-
-		if len(currentDemos) < b.MaxBootstrapped {
-
-			newDemos := append(currentDemos, demo)
-			predictor.SetDemos(newDemos)
-			span.WithAnnotation("added_to_module", moduleName)
-			span.WithAnnotation("total_demos", len(newDemos))
-			return nil
-		} else {
-			span.WithAnnotation("skipped_module", moduleName)
-			span.WithAnnotation("reason", "max_demos_reached")
-			return errors.WithFields(
-				errors.New(errors.ResourceExhausted, fmt.Sprintf("max demonstrations reached for module %s", moduleName)),
-				errors.Fields{
-					"module":        moduleName,
-					"max_demos":     b.MaxBootstrapped,
-					"current_demos": len(currentDemos),
-				})
-		}
-	}
-	return errors.New(errors.ResourceNotFound, "no suitable module found for adding demonstrations")
+func (b *BootstrapFewShot) addDemonstrations(program *core.Program, demo core.Example, ctx context.Context) error {
+	program.Demonstrations = append(program.Demonstrations, demo)
+	return nil
 }

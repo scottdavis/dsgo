@@ -83,10 +83,7 @@ type Trial struct {
 	Score  float64
 }
 
-func (m *MIPRO) Compile(ctx context.Context, program core.Program, dataset core.Dataset, metric core.Metric) (core.Program, error) {
-	if core.GetExecutionState(ctx) == nil {
-		ctx = core.WithExecutionState(ctx)
-	}
+func (m *MIPRO) Compile(ctx context.Context, program *core.Program, dataset core.Dataset, metric core.Metric) (*core.Program, error) {
 	compileCtx, compilationSpan := core.StartSpan(ctx, "MIPROCompilation")
 	defer core.EndSpan(compileCtx)
 
@@ -157,7 +154,6 @@ func (m *MIPRO) Compile(ctx context.Context, program core.Program, dataset core.
 	result := m.constructProgram(program, bestTrial, instructionCandidates, demoCandidates)
 	compilationSpan.WithAnnotation("final_score", bestScore)
 	return result, nil
-
 }
 
 func (m *MIPRO) generateTrial(modules []core.Module, numInstructions, numDemos int) Trial {
@@ -169,7 +165,7 @@ func (m *MIPRO) generateTrial(modules []core.Module, numInstructions, numDemos i
 	return Trial{Params: params}
 }
 
-func (m *MIPRO) constructProgram(baseProgram core.Program, trial Trial, instructionCandidates [][]string, demoCandidates [][][]core.Example) core.Program {
+func (m *MIPRO) constructProgram(baseProgram *core.Program, trial Trial, instructionCandidates [][]string, demoCandidates [][][]core.Example) *core.Program {
 	program := baseProgram.Clone()
 	modulesList := program.GetModules()
 
@@ -191,78 +187,44 @@ func (m *MIPRO) constructProgram(baseProgram core.Program, trial Trial, instruct
 	return program
 }
 
-func (m *MIPRO) evaluateProgram(ctx context.Context, program core.Program, dataset core.Dataset, metric core.Metric) (float64, error) {
+func (m *MIPRO) evaluateProgram(ctx context.Context, program *core.Program, dataset core.Dataset, metric core.Metric) (float64, error) {
+	// Evaluate on a mini-batch
+	var totalScore float64
+	var numExamples int
 
-	logger := logging.GetLogger()
-
-	logger.Debug(ctx, "MIPRO evaluateProgram: Using metric function: %v", m.Metric != nil)
-
-	totalScore := 0.0
-	count := 0
-	ctx = core.WithExecutionState(ctx)
-	ctx, evalSpan := core.StartSpan(ctx, "EvaluateProgram")
-	defer core.EndSpan(ctx)
-	for i := 0; i < m.MiniBatchSize; i++ {
-		example, ok := dataset.Next()
-
-		if !ok {
-			if i == 0 {
-				return 0, fmt.Errorf("no examples available from dataset")
-			}
+	dataset.Reset()
+	for numExamples < m.MiniBatchSize {
+		example, hasMore := dataset.Next()
+		if !hasMore {
 			break
 		}
 
-		// Create a context for each example evaluation
-		exampleCtx, exampleSpan := core.StartSpan(ctx, "EvaluateExample")
-		exampleSpan.WithAnnotation("example_inputs", example.Inputs)
-		prediction, err := program.Execute(exampleCtx, example.Inputs)
+		// Execute the program on the example
+		prediction, err := program.Execute(ctx, example.Input)
 		if err != nil {
-			exampleSpan.WithError(err)
-			core.EndSpan(exampleCtx)
-			return 0, fmt.Errorf("failed to evaluate program: error executing program: %w", err)
-		}
-		exampleSpan.WithAnnotation("prediction", prediction)
-		metricCtx, metricSpan := core.StartSpan(exampleCtx, "MetricEvaluation")
-
-		// First, try to use the context-aware metric if available
-		var score float64
-		if m.Metric != nil {
-			exampleMap := map[string]any{}
-			for k, v := range example.Inputs {
-				exampleMap[k] = v
-			}
-			score = m.Metric(exampleMap, prediction, metricCtx)
-		} else if metric != nil {
-			// Fall back to the provided non-context metric
-			score = metric(example.Outputs, prediction)
-		} else {
-			// No metrics available
-			score = 0.0
+			return 0, err
 		}
 
-		logger.Debug(ctx, "SCORE FROM METRIC: %.2f", score)
-		metricSpan.WithAnnotation("score", score)
-		core.EndSpan(metricCtx)
-		totalScore += score
-		count++
-		core.EndSpan(exampleCtx)
-
+		// Evaluate the prediction
+		score, _ := metric(ctx, prediction)
+		if score {
+			totalScore += 1.0
+		}
+		numExamples++
 	}
 
-	if count == 0 {
-		return 0, fmt.Errorf("failed to evaluate program: no examples evaluated")
+	if numExamples == 0 {
+		return 0, nil
 	}
-	averageScore := totalScore / float64(count)
-	evalSpan.WithAnnotation("average_score", averageScore)
-	evalSpan.WithAnnotation("examples_evaluated", count)
-	return averageScore, nil
+
+	return totalScore / float64(numExamples), nil
 }
 
 func (m *MIPRO) logTrialResult(trialNum int, trial Trial) {
 	fmt.Printf("Trial %d: Score %.4f\n", trialNum, trial.Score)
 }
 
-func (m *MIPRO) generateInstructionCandidates(ctx context.Context, program core.Program, dataset core.Dataset) ([][]string, error) {
+func (m *MIPRO) generateInstructionCandidates(ctx context.Context, program *core.Program, dataset core.Dataset) ([][]string, error) {
 	candidates := make([][]string, len(program.GetModules()))
 	for i, module := range program.GetModules() {
 		if predictor, ok := module.(*modules.Predict); ok {
@@ -279,7 +241,7 @@ func (m *MIPRO) generateInstructionCandidates(ctx context.Context, program core.
 	return candidates, nil
 }
 
-func (m *MIPRO) generateDemoCandidates(ctx context.Context, program core.Program, dataset core.Dataset) ([][][]core.Example, error) {
+func (m *MIPRO) generateDemoCandidates(ctx context.Context, program *core.Program, dataset core.Dataset) ([][][]core.Example, error) {
 	candidates := make([][][]core.Example, len(program.GetModules()))
 	logger := logging.GetLogger()
 
@@ -293,7 +255,7 @@ func (m *MIPRO) generateDemoCandidates(ctx context.Context, program core.Program
 		if !ok {
 			break
 		}
-		if len(example.Outputs) > 0 {
+		if len(example.Output) > 0 {
 			allExamples = append(allExamples, example)
 		}
 	}
