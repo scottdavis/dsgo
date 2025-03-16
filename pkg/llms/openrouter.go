@@ -1,6 +1,7 @@
 package llms
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -9,6 +10,7 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/XiaoConstantine/dspy-go/pkg/core"
@@ -52,6 +54,7 @@ func NewOpenRouterLLM(apiKey string, modelName string) (*OpenRouterLLM, error) {
 		core.CapabilityCompletion,
 		core.CapabilityChat,
 		core.CapabilityJSON,
+		core.CapabilityStreaming,
 	}
 
 	endpointCfg := &core.EndpointConfig{
@@ -59,7 +62,7 @@ func NewOpenRouterLLM(apiKey string, modelName string) (*OpenRouterLLM, error) {
 		Path:    "/chat/completions",
 		Headers: map[string]string{
 			"Content-Type":  "application/json",
-			"Authorization": "Bearer " + apiKey,
+			"Authorization": strings.TrimSpace(apiKey),
 			"HTTP-Referer":  "https://github.com/XiaoConstantine/dspy-go", // Optional: identify your app
 		},
 		TimeoutSec: 10 * 60, // Default timeout
@@ -589,4 +592,271 @@ func (o *OpenRouterLLM) CreateEmbedding(ctx context.Context, input string, optio
 func (o *OpenRouterLLM) CreateEmbeddings(ctx context.Context, inputs []string, options ...core.EmbeddingOption) (*core.BatchEmbeddingResult, error) {
 	// OpenRouter does support embeddings, but might require implementing with their API
 	return nil, errors.New(errors.Unknown, "CreateEmbeddings not implemented for OpenRouter")
+}
+
+// StreamGenerate implements streaming generation for OpenRouter
+func (o *OpenRouterLLM) StreamGenerate(ctx context.Context, prompt string, options ...core.GenerateOption) (*core.StreamResponse, error) {
+	// Apply options
+	opts := core.NewGenerateOptions()
+	for _, option := range options {
+		option(opts)
+	}
+
+	// Create the request messages from the prompt
+	messages := []openRouterMessage{
+		{
+			Role:    "user",
+			Content: prompt,
+		},
+	}
+
+	// Prepare the API request
+	req := openRouterRequest{
+		Model:       string(o.ModelID()),
+		Messages:    messages,
+		Temperature: opts.Temperature,
+		MaxTokens:   opts.MaxTokens,
+		TopP:        opts.TopP,
+		Stream:      true, // Always true for streaming
+		Stop:        opts.Stop,
+	}
+
+	// Convert request to JSON
+	reqData, err := json.Marshal(req)
+	if err != nil {
+		return nil, errors.WithFields(
+			errors.Wrap(err, errors.Unknown, "failed to serialize OpenRouter request"),
+			errors.Fields{
+				"model":   o.ModelID(),
+				"prompt":  prompt,
+				"options": opts,
+			})
+	}
+
+	// Set up the HTTP request
+	endpoint := o.GetEndpointConfig()
+	reqURL := endpoint.BaseURL + endpoint.Path
+
+	httpReq, err := http.NewRequestWithContext(ctx, "POST", reqURL, bytes.NewBuffer(reqData))
+	if err != nil {
+		return nil, errors.WithFields(
+			errors.Wrap(err, errors.Unknown, "failed to create HTTP request"),
+			errors.Fields{
+				"url":    reqURL,
+				"method": "POST",
+			})
+	}
+
+	// Add headers
+	for key, value := range endpoint.Headers {
+		httpReq.Header.Set(key, value)
+	}
+
+	// Create a channel for streaming chunks
+	chunkChan := make(chan core.StreamChunk)
+
+	// Create a cancellable context
+	streamCtx, cancelStream := context.WithCancel(ctx)
+
+	// Prepare response
+	streamResp := &core.StreamResponse{
+		ChunkChannel: chunkChan,
+		Cancel:       cancelStream,
+	}
+
+	// Start a goroutine to handle the streaming response
+	go func() {
+		defer close(chunkChan)
+
+		// Create HTTP client
+		client := o.GetHTTPClient()
+
+		// Send the request
+		httpResp, err := client.Do(httpReq)
+		if err != nil {
+			chunkChan <- core.StreamChunk{
+				Error: errors.WithFields(
+					errors.Wrap(err, errors.Unknown, "failed to send HTTP request"),
+					errors.Fields{
+						"url":    reqURL,
+						"method": "POST",
+					}),
+			}
+			return
+		}
+		defer httpResp.Body.Close()
+
+		// Check for API errors
+		if httpResp.StatusCode != http.StatusOK {
+			// Try to read error details
+			respBody, _ := io.ReadAll(httpResp.Body)
+
+			// Try to parse error as JSON
+			var errorResp openRouterResponse
+
+			rateLimitHeaders := make(map[string]string)
+			if limit := httpResp.Header.Get("X-RateLimit-Limit"); limit != "" {
+				rateLimitHeaders["X-RateLimit-Limit"] = limit
+			}
+			if remaining := httpResp.Header.Get("X-RateLimit-Remaining"); remaining != "" {
+				rateLimitHeaders["X-RateLimit-Remaining"] = remaining
+			}
+			if reset := httpResp.Header.Get("X-RateLimit-Reset"); reset != "" {
+				rateLimitHeaders["X-RateLimit-Reset"] = reset
+			}
+
+			// If rate limit info is in headers, format it in the error
+			var errMsg string
+			if limit, ok := rateLimitHeaders["X-RateLimit-Limit"]; ok {
+				// Extract rate limit information
+				limitVal, _ := strconv.Atoi(limit)
+				remainingVal, _ := strconv.Atoi(rateLimitHeaders["X-RateLimit-Remaining"])
+
+				resetTime := formatResetTime(rateLimitHeaders["X-RateLimit-Reset"])
+
+				if httpResp.StatusCode == http.StatusTooManyRequests ||
+					(remainingVal == 0 && limitVal > 0) {
+					errMsg = fmt.Sprintf("Rate limited by OpenRouter. Limit: %d, Remaining: %d, Reset: %s",
+						limitVal, remainingVal, resetTime)
+				}
+			}
+
+			// Try to parse response body as JSON for additional error details
+			if json.Unmarshal(respBody, &errorResp) == nil && errorResp.Error != nil {
+				if errMsg == "" {
+					errMsg = fmt.Sprintf("OpenRouter API error: %s (code: %d)",
+						errorResp.Error.Message, errorResp.Error.Code)
+				}
+
+				// If error has rate limit metadata, include it
+				if errorResp.Error.Metadata != nil && errorResp.Error.Metadata.Headers != nil {
+					if errorResp.Error.Code == 429 {
+						limit := errorResp.Error.Metadata.Headers["x-ratelimit-limit"]
+						remaining := errorResp.Error.Metadata.Headers["x-ratelimit-remaining"]
+						reset := errorResp.Error.Metadata.Headers["x-ratelimit-reset"]
+
+						if reset != "" {
+							resetTime := formatResetTime(reset)
+							errMsg = fmt.Sprintf("Rate limited by OpenRouter. Limit: %s, Remaining: %s, Reset: %s. %s",
+								limit, remaining, resetTime, errorResp.Error.Message)
+						}
+					}
+				}
+			}
+
+			// If still no error message, use generic one
+			if errMsg == "" {
+				errMsg = fmt.Sprintf("OpenRouter API error: %d - %s",
+					httpResp.StatusCode, string(respBody))
+			}
+
+			chunkChan <- core.StreamChunk{
+				Error: errors.New(errors.Unknown, errMsg),
+			}
+			return
+		}
+
+		// Process the streaming response
+		reader := bufio.NewReader(httpResp.Body)
+
+		// Initialize content builder
+		var content strings.Builder
+
+		// Initialize token usage
+		tokenUsage := &core.TokenInfo{}
+
+		for {
+			select {
+			case <-streamCtx.Done():
+				// Stream was cancelled
+				return
+			default:
+				// Read next line
+				line, err := reader.ReadString('\n')
+				if err != nil {
+					if err == io.EOF {
+						// End of stream
+						chunkChan <- core.StreamChunk{
+							Done:  true,
+							Usage: tokenUsage,
+						}
+						return
+					}
+
+					// Other error
+					chunkChan <- core.StreamChunk{
+						Error: errors.Wrap(err, errors.Unknown, "error reading stream"),
+					}
+					return
+				}
+
+				// Skip empty lines and comments
+				line = strings.TrimSpace(line)
+				if line == "" || strings.HasPrefix(line, ":") {
+					continue
+				}
+
+				// SSE format: data: {json}
+				if !strings.HasPrefix(line, "data:") {
+					continue
+				}
+
+				// Extract the JSON payload
+				data := strings.TrimPrefix(line, "data:")
+				data = strings.TrimSpace(data)
+
+				// Check for end of stream signal
+				if data == "[DONE]" {
+					chunkChan <- core.StreamChunk{
+						Done:  true,
+						Usage: tokenUsage,
+					}
+					return
+				}
+
+				// Parse the JSON
+				var streamResp openRouterResponse
+				if err := json.Unmarshal([]byte(data), &streamResp); err != nil {
+					chunkChan <- core.StreamChunk{
+						Error: errors.Wrap(err, errors.Unknown, "error parsing stream data"),
+					}
+					return
+				}
+
+				// Check for error in the response
+				if streamResp.Error != nil {
+					errMsg := fmt.Sprintf("OpenRouter API error: %s (code: %d)",
+						streamResp.Error.Message, streamResp.Error.Code)
+
+					chunkChan <- core.StreamChunk{
+						Error: errors.New(errors.Unknown, errMsg),
+					}
+					return
+				}
+
+				// Extract content
+				if len(streamResp.Choices) > 0 {
+					chunk := streamResp.Choices[0].Message.Content
+
+					// Update content
+					content.WriteString(chunk)
+
+					// Update token usage if available
+					if streamResp.Usage.TotalTokens > 0 {
+						tokenUsage.PromptTokens = streamResp.Usage.PromptTokens
+						tokenUsage.CompletionTokens = streamResp.Usage.CompletionTokens
+						tokenUsage.TotalTokens = streamResp.Usage.TotalTokens
+					}
+
+					// Send chunk
+					chunkChan <- core.StreamChunk{
+						Content: chunk,
+						Usage:   tokenUsage,
+					}
+				}
+			}
+		}
+	}()
+
+	return streamResp, nil
 }

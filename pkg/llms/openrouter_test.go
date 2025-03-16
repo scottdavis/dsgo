@@ -59,13 +59,14 @@ func TestNewOpenRouterLLM(t *testing.T) {
 				assert.Contains(t, capabilities, core.CapabilityCompletion)
 				assert.Contains(t, capabilities, core.CapabilityChat)
 				assert.Contains(t, capabilities, core.CapabilityJSON)
+				assert.Contains(t, capabilities, core.CapabilityStreaming)
 
 				// Check endpoint configuration
 				endpoint := llm.GetEndpointConfig()
 				assert.Equal(t, openRouterBaseURL, endpoint.BaseURL)
 				assert.Equal(t, "/chat/completions", endpoint.Path)
 				assert.Contains(t, endpoint.Headers, "Authorization")
-				assert.Contains(t, endpoint.Headers["Authorization"], tc.apiKey)
+				assert.Equal(t, tc.apiKey, endpoint.Headers["Authorization"])
 			}
 		})
 	}
@@ -526,4 +527,203 @@ func TestOpenRouterGenerateWithFunctionsRateLimitHandlingWithMetadata(t *testing
 
 	// Test that we made exactly one request
 	assert.Equal(t, 1, requestCount, "Should have made exactly 1 request")
+}
+
+// TestOpenRouterLLM_StreamGenerate tests the streaming capability of OpenRouter
+func TestOpenRouterLLM_StreamGenerate(t *testing.T) {
+	t.Run("Successful streaming", func(t *testing.T) {
+		// Create a test server that simulates streaming
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Verify the request
+			assert.Equal(t, "POST", r.Method)
+			assert.Contains(t, r.URL.Path, "/chat/completions")
+			assert.Contains(t, r.Header.Get("Content-Type"), "application/json")
+			assert.NotEmpty(t, r.Header.Get("Authorization"))
+
+			// Set headers for SSE
+			w.Header().Set("Content-Type", "text/event-stream")
+			w.Header().Set("Cache-Control", "no-cache")
+			w.Header().Set("Connection", "keep-alive")
+			w.WriteHeader(http.StatusOK)
+
+			// Flush the headers
+			if f, ok := w.(http.Flusher); ok {
+				f.Flush()
+			}
+
+			// Send multiple chunks
+			chunks := []string{
+				`{"id":"test-id-1","object":"chat.completion.chunk","created":1677858242,"model":"test-model","choices":[{"index":0,"message":{"role":"assistant","content":"Hello"}}]}`,
+				`{"id":"test-id-2","object":"chat.completion.chunk","created":1677858243,"model":"test-model","choices":[{"index":0,"message":{"role":"assistant","content":" world"}}]}`,
+				`{"id":"test-id-3","object":"chat.completion.chunk","created":1677858244,"model":"test-model","choices":[{"index":0,"message":{"role":"assistant","content":"!"}}],"usage":{"prompt_tokens":10,"completion_tokens":3,"total_tokens":13}}`,
+			}
+
+			// Write each chunk as an SSE message
+			for _, chunk := range chunks {
+				fmt.Fprintf(w, "data: %s\n\n", chunk)
+				if f, ok := w.(http.Flusher); ok {
+					f.Flush()
+				}
+				time.Sleep(10 * time.Millisecond)
+			}
+
+			// Signal the end of the stream
+			fmt.Fprintf(w, "data: [DONE]\n\n")
+			if f, ok := w.(http.Flusher); ok {
+				f.Flush()
+			}
+		}))
+		defer server.Close()
+
+		// Create OpenRouterLLM with the test server URL
+		llm, err := NewOpenRouterLLM("test-api-key", "test-model")
+		require.NoError(t, err)
+
+		// Override the endpoint to use our test server
+		endpointCfg := llm.GetEndpointConfig()
+		endpointCfg.BaseURL = server.URL
+		endpointCfg.Path = "/chat/completions"
+
+		// Create context
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+
+		// Call StreamGenerate
+		stream, err := llm.StreamGenerate(ctx, "Test prompt")
+		require.NoError(t, err)
+		require.NotNil(t, stream)
+
+		// Collect all chunks
+		var chunks []string
+		var lastTokenUsage *core.TokenInfo
+		var gotDoneSignal bool
+
+		for chunk := range stream.ChunkChannel {
+			if chunk.Error != nil {
+				t.Fatalf("Unexpected error in stream: %v", chunk.Error)
+			}
+
+			if chunk.Done {
+				gotDoneSignal = true
+				lastTokenUsage = chunk.Usage
+				break
+			}
+
+			chunks = append(chunks, chunk.Content)
+		}
+
+		// Verify we got all the expected chunks
+		assert.Equal(t, []string{"Hello", " world", "!"}, chunks)
+
+		// Verify we got the done signal
+		assert.True(t, gotDoneSignal, "Should have received the done signal")
+
+		// Verify token usage
+		assert.NotNil(t, lastTokenUsage, "Should have received token usage")
+		assert.Equal(t, 10, lastTokenUsage.PromptTokens)
+		assert.Equal(t, 3, lastTokenUsage.CompletionTokens)
+		assert.Equal(t, 13, lastTokenUsage.TotalTokens)
+	})
+
+	t.Run("Error handling", func(t *testing.T) {
+		// Create a test server that simulates an error
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Send an error response
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(`{"error":{"message":"Test error","code":500}}`))
+		}))
+		defer server.Close()
+
+		// Create OpenRouterLLM with the test server URL
+		llm, err := NewOpenRouterLLM("test-api-key", "test-model")
+		require.NoError(t, err)
+
+		// Override the endpoint to use our test server
+		endpointCfg := llm.GetEndpointConfig()
+		endpointCfg.BaseURL = server.URL
+		endpointCfg.Path = "/chat/completions"
+
+		// Create context
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+
+		// Call StreamGenerate
+		stream, err := llm.StreamGenerate(ctx, "Test prompt")
+		require.NoError(t, err)
+		require.NotNil(t, stream)
+
+		// We should get an error in the first chunk
+		chunk := <-stream.ChunkChannel
+		require.NotNil(t, chunk.Error, "Expected an error in the stream")
+		assert.Contains(t, chunk.Error.Error(), "OpenRouter API error")
+	})
+
+	t.Run("Stream cancellation", func(t *testing.T) {
+		// Create a test server that simulates a long-running stream
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Set headers for SSE
+			w.Header().Set("Content-Type", "text/event-stream")
+			w.Header().Set("Cache-Control", "no-cache")
+			w.Header().Set("Connection", "keep-alive")
+			w.WriteHeader(http.StatusOK)
+
+			// Flush the headers
+			if f, ok := w.(http.Flusher); ok {
+				f.Flush()
+			}
+
+			// Keep the connection open until the client disconnects
+			for i := 0; i < 10; i++ {
+				select {
+				case <-r.Context().Done():
+					return
+				default:
+					chunk := fmt.Sprintf(`{"id":"test-id-%d","object":"chat.completion.chunk","created":1677858242,"model":"test-model","choices":[{"index":0,"message":{"role":"assistant","content":"Chunk %d"}}]}`, i, i)
+					fmt.Fprintf(w, "data: %s\n\n", chunk)
+					if f, ok := w.(http.Flusher); ok {
+						f.Flush()
+					}
+					time.Sleep(100 * time.Millisecond)
+				}
+			}
+		}))
+		defer server.Close()
+
+		// Create OpenRouterLLM with the test server URL
+		llm, err := NewOpenRouterLLM("test-api-key", "test-model")
+		require.NoError(t, err)
+
+		// Override the endpoint to use our test server
+		endpointCfg := llm.GetEndpointConfig()
+		endpointCfg.BaseURL = server.URL
+		endpointCfg.Path = "/chat/completions"
+
+		// Create context
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		// Call StreamGenerate
+		stream, err := llm.StreamGenerate(ctx, "Test prompt")
+		require.NoError(t, err)
+		require.NotNil(t, stream)
+
+		// Read a few chunks
+		var chunks []string
+		for i := 0; i < 3; i++ {
+			chunk := <-stream.ChunkChannel
+			require.Nil(t, chunk.Error)
+			require.False(t, chunk.Done)
+			chunks = append(chunks, chunk.Content)
+		}
+
+		// Cancel the stream
+		stream.Cancel()
+
+		// Wait a bit to make sure the goroutine finishes
+		time.Sleep(200 * time.Millisecond)
+
+		// Verify we got some chunks before cancelling
+		assert.GreaterOrEqual(t, len(chunks), 1)
+		assert.Less(t, len(chunks), 10)
+	})
 }
