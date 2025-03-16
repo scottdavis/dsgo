@@ -26,7 +26,14 @@ type SQLiteStore struct {
 // The path parameter specifies the database file location.
 // If path is ":memory:", the database will be created in-memory.
 func NewSQLiteStore(path string) (*SQLiteStore, error) {
-	db, err := sql.Open("sqlite3", path+"?cache=shared&mode=memory")
+	var connStr string
+	if path == ":memory:" {
+		connStr = path + "?cache=shared&mode=memory"
+	} else {
+		connStr = path + "?cache=shared"
+	}
+	
+	db, err := sql.Open("sqlite3", connStr)
 	if err != nil {
 		return nil, errors.WithFields(
 			errors.Wrap(err, errors.Unknown, "failed to open SQLite database"),
