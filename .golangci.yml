@@ -2,7 +2,6 @@ linters:
   disable-all: true
   enable:
     - errcheck
-    - godot
     - gosimple
     - govet
     - ineffassign

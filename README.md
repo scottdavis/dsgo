@@ -1,5 +1,7 @@
 # DSGo
 
+**This is mostly for my personal use, so support is not guaranteed.**
+
 A Go implementation of the Declarative Self-improving programming (DSPy) pattern.
 
 ## Acknowledgments
@@ -46,10 +48,18 @@ import (
 func main() {
     // Configure the default LLM
     llms.EnsureFactory()
-    err := config.ConfigureDefaultLLM("your-api-key", core.ModelAnthropicSonnet)
+    
+    // Create an LLM instance (example with Anthropic)
+    anthropicLLM, err := llms.NewLLM("your-api-key", llms.NewAnthropicConfig(core.ModelAnthropicSonnet))
     if err != nil {
         log.Fatalf("Failed to configure LLM: %v", err)
     }
+    
+    // Set as default LLM (optional)
+    llms.SetDefaultLLM(anthropicLLM)
+    
+    // Alternatively, you can create a DSPYConfig directly with the LLM
+    // dspyConfig := core.NewDSPYConfig().WithDefaultLLM(anthropicLLM)
 
     // Create a signature for question answering
     signature := core.NewSignature(
@@ -57,8 +67,11 @@ func main() {
         []core.OutputField{{Field: core.Field{Name: "answer"}}},
     )
 
+    // Create a DSPYConfig with the default LLM
+    dspyConfig := core.NewDSPYConfig().WithDefaultLLM(llms.GetDefaultLLM())
+
     // Create a ChainOfThought module
-    cot := modules.NewChainOfThought(signature)
+    cot := modules.NewChainOfThought(signature, dspyConfig)
 
     // Create a program
     program := core.NewProgram(
@@ -66,6 +79,7 @@ func main() {
         func(ctx context.Context, inputs map[string]interface{}) (map[string]interface{}, error) {
             return cot.Process(ctx, inputs)
         },
+        dspyConfig,
     )
 
     // Execute the program
@@ -176,26 +190,28 @@ func (t *CustomTool) Execute(ctx context.Context, action string) (string, error)
 #### Working with Different LLM Providers
 ```go
 // Using Anthropic Claude
-llm, _ := llms.NewAnthropicLLM("api-key", anthropic.ModelSonnet)
+anthropicConfig := llms.NewAnthropicConfig(llms.AnthropicModelSonnet)
+llm, _ := llms.NewLLM("api-key", anthropicConfig)
 
 // Using Ollama (various options)
-// Option 1: Direct constructor
-llm, _ := llms.NewOllamaLLM("http://localhost:11434", "llama2")
-
-// Option 2: Using NewLLM with config
-ollamaConfig := llms.NewOllamaConfig("http://ollama.myhost:11434", "llama2")
+// Option 1: Using NewLLM with OllamaConfig
+ollamaConfig := llms.NewOllamaConfig("http://localhost:11434", "llama2")
 llm, _ := llms.NewLLM("", ollamaConfig)
 
-// Option 3: Using string format (legacy)
-llm, _ := llms.NewLLM("", "ollama:llama2")
+// Option 2: Using OpenRouter
+openRouterConfig := llms.NewOpenRouterConfig(llms.OpenRouterModelNeevaAI)
+llm, _ := llms.NewLLM("api-key", openRouterConfig)
+
+// Option 3: Using LlamaCPP
+llm, _ := llms.NewLlamacppLLM("http://localhost:8080")
 
 // Option 4: Using string format with custom host
 llm, _ := llms.NewLLM("", "ollama:example.com:11434:llama2")
 // or with protocol
 llm, _ := llms.NewLLM("", "ollama:http://example.com:11434:llama2")
 
-// Using LlamaCPP
-llm, _ := llms.NewLlamacppLLM("http://localhost:8080")
+// Create DSPYConfig with the LLM
+dspyConfig := core.NewDSPYConfig().WithDefaultLLM(llm)
 ```
 
 

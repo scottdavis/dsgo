@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -181,6 +182,12 @@ func WithFormatter(formatter LogFormatter) FileOutputOption {
 
 // NewFileOutput creates a new file-based logger output.
 func NewFileOutput(path string, opts ...FileOutputOption) (*FileOutput, error) {
+	// Path validation to ensure cross-platform compatibility
+	if runtime.GOOS == "windows" && (strings.HasPrefix(path, "/") || strings.HasPrefix(path, "\\")) && !strings.HasPrefix(path, "//?/") && !strings.HasPrefix(path, "//./") {
+		// On Windows, paths starting with / or \ without UNC prefix are likely invalid/unintended
+		return nil, fmt.Errorf("invalid path format for Windows: %s", path)
+	}
+
 	// Create the directory if it doesn't exist
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0755); err != nil {

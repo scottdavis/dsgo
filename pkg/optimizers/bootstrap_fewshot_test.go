@@ -53,26 +53,26 @@ func TestBootstrapFewShot(t *testing.T) {
 	metric := func(example, prediction map[string]any, ctx context.Context) bool {
 		return true
 	}
-	
+
 	// Create the optimizer
 	optimizer := NewBootstrapFewShot(metric, 5, testConfig)
-	
+
 	assert.Equal(t, 5, optimizer.MaxBootstrapped)
 	assert.Equal(t, testConfig, optimizer.Config)
-	
+
 	// Create training data
 	trainset := []map[string]any{
 		{"question": "What is the capital of France?"},
 		{"question": "What is the capital of Germany?"},
 	}
-	
+
 	// Create student and teacher programs
 	student := createProgram()
 	teacher := createProgram()
-	
+
 	// Test compilation
 	compiled, err := optimizer.Compile(context.Background(), student, teacher, trainset)
-	
+
 	assert.NoError(t, err)
 	assert.NotNil(t, compiled)
 }
@@ -89,13 +89,13 @@ func TestBootstrapFewShotEdgeCases(t *testing.T) {
 		metric := func(example, prediction map[string]any, ctx context.Context) bool {
 			return true
 		}
-		
+
 		optimizer := NewBootstrapFewShot(metric, 0, testConfig)
 		ctx := context.Background()
 
 		student := createProgram()
 		teacher := createProgram()
-		
+
 		optimized, err := optimizer.Compile(ctx, student, teacher, trainset)
 		assert.NoError(t, err)
 		assert.Equal(t, 0, len(optimized.Demonstrations))
@@ -106,20 +106,20 @@ func TestBootstrapFewShotEdgeCases(t *testing.T) {
 		metric := func(example, prediction map[string]any, ctx context.Context) bool {
 			return false // Force teacher predictions to be used
 		}
-		
+
 		optimizer := NewBootstrapFewShot(metric, 100, testConfig)
-		
+
 		// We need to mock the student and teacher programs to ensure
 		// the expected behavior with teacher predictions
 		ctx := context.Background()
 		student := createProgram()
 		teacher := createProgram()
-		
+
 		// Adjust the test to verify function was called rather than
 		// expecting actual demonstrations to be added
 		// This is because our mock setup doesn't actually execute the LLM predictions
 		optimized, err := optimizer.Compile(ctx, student, teacher, trainset)
-		
+
 		assert.NoError(t, err)
 		// Remove the expectation about demonstrations length since it's dependent
 		// on the actual implementation behavior with the mocks
@@ -131,13 +131,13 @@ func TestBootstrapFewShotEdgeCases(t *testing.T) {
 		metric := func(example, prediction map[string]any, ctx context.Context) bool {
 			return true // Student predictions are already correct
 		}
-		
+
 		optimizer := NewBootstrapFewShot(metric, 2, testConfig)
 		ctx := context.Background()
-		
+
 		student := createProgram()
 		teacher := createProgram()
-		
+
 		optimized, err := optimizer.Compile(ctx, student, teacher, trainset)
 		assert.NoError(t, err)
 		assert.Equal(t, 0, len(optimized.Demonstrations))

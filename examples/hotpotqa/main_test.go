@@ -76,8 +76,8 @@ func TestOpenRouterConfig(t *testing.T) {
 func TestDSPYConfig(t *testing.T) {
 	config := core.NewDSPYConfig()
 	config = config.WithConcurrencyLevel(10)
-	
+
 	if config.ConcurrencyLevel != 10 {
 		t.Errorf("Expected concurrency level to be 10, got %d", config.ConcurrencyLevel)
 	}
-} 
+}

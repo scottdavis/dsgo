@@ -22,7 +22,7 @@ type Logger struct {
 	mu         sync.Mutex
 	severity   Severity
 	outputs    []Output
-	sampleRate uint32                 // For high-frequency event sampling
+	sampleRate uint32         // For high-frequency event sampling
 	fields     map[string]any // Default fields for all logs
 }
 

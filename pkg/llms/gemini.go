@@ -42,8 +42,8 @@ type geminiTool struct {
 }
 
 type geminiFunctionDeclaration struct {
-	Name        string                 `json:"name"`
-	Description string                 `json:"description,omitempty"`
+	Name        string         `json:"name"`
+	Description string         `json:"description,omitempty"`
 	Parameters  map[string]any `json:"parameters"`
 }
 type geminiContent struct {
@@ -93,7 +93,7 @@ type geminiFunctionResponse struct {
 	} `json:"usageMetadata"`
 }
 type geminiFunctionCall struct {
-	Name      string                 `json:"name"`
+	Name      string         `json:"name"`
 	Arguments map[string]any `json:"arguments"`
 }
 
@@ -108,7 +108,7 @@ type geminiEmbeddingRequest struct {
 	// Task type helps the model generate appropriate embeddings
 	TaskType string `json:"taskType,omitempty"`
 	// Additional configuration
-	Title      string                 `json:"title,omitempty"`
+	Title      string         `json:"title,omitempty"`
 	Parameters map[string]any `json:"parameters,omitempty"`
 }
 
@@ -121,7 +121,7 @@ type geminiBatchEmbeddingRequest struct {
 			} `json:"parts"`
 		} `json:"content"`
 	} `json:"requests"`
-	TaskType   string                 `json:"taskType,omitempty"`
+	TaskType   string         `json:"taskType,omitempty"`
 	Parameters map[string]any `json:"parameters,omitempty"`
 }
 

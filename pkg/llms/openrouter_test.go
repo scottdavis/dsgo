@@ -124,14 +124,17 @@ func TestOpenRouterRateLimitHandling(t *testing.T) {
 			w.Header().Set("X-RateLimit-Remaining", "0")
 			w.Header().Set("X-RateLimit-Reset", strconv.FormatInt(resetTime, 10))
 			w.WriteHeader(http.StatusTooManyRequests)
-			w.Write([]byte(`{"error": {"message": "Rate limit exceeded"}}`))
+			_, err := w.Write([]byte(`{"error": {"message": "Rate limit exceeded"}}`))
+			if err != nil {
+				t.Errorf("Failed to write response: %v", err)
+			}
 			return
 		}
 
 		// Subsequent requests succeed
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{
+		_, err := w.Write([]byte(`{
 			"id": "test-response",
 			"object": "chat.completion",
 			"created": 1677858242,
@@ -152,6 +155,9 @@ func TestOpenRouterRateLimitHandling(t *testing.T) {
 				"total_tokens": 30
 			}
 		}`))
+		if err != nil {
+			t.Errorf("Failed to write response: %v", err)
+		}
 	}))
 	defer server.Close()
 
@@ -200,7 +206,7 @@ func TestOpenRouterRateLimitHandlingWith200Status(t *testing.T) {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
 			// Return a valid response but with empty choices - this is how OpenRouter indicates rate limiting
-			w.Write([]byte(`{
+			_, err := w.Write([]byte(`{
 				"id": "rate-limited-response",
 				"object": "chat.completion",
 				"created": 1677858242,
@@ -212,13 +218,16 @@ func TestOpenRouterRateLimitHandlingWith200Status(t *testing.T) {
 					"total_tokens": 10
 				}
 			}`))
+			if err != nil {
+				t.Errorf("Failed to write response: %v", err)
+			}
 			return
 		}
 
 		// Subsequent requests succeed with normal response
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{
+		_, err := w.Write([]byte(`{
 			"id": "test-response",
 			"object": "chat.completion",
 			"created": 1677858242,
@@ -239,6 +248,9 @@ func TestOpenRouterRateLimitHandlingWith200Status(t *testing.T) {
 				"total_tokens": 35
 			}
 		}`))
+		if err != nil {
+			t.Errorf("Failed to write response: %v", err)
+		}
 	}))
 	defer server.Close()
 
@@ -288,7 +300,7 @@ func TestOpenRouterGenerateWithFunctionsRateLimitHandlingWith200Status(t *testin
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
 			// Return a valid response but with empty choices - this is how OpenRouter indicates rate limiting
-			w.Write([]byte(`{
+			_, err := w.Write([]byte(`{
 				"id": "rate-limited-response",
 				"object": "chat.completion",
 				"created": 1677858242,
@@ -300,13 +312,16 @@ func TestOpenRouterGenerateWithFunctionsRateLimitHandlingWith200Status(t *testin
 					"total_tokens": 10
 				}
 			}`))
+			if err != nil {
+				t.Errorf("Failed to write response: %v", err)
+			}
 			return
 		}
 
 		// Subsequent requests succeed with normal response
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{
+		_, err := w.Write([]byte(`{
 			"id": "test-response",
 			"object": "chat.completion",
 			"created": 1677858242,
@@ -328,6 +343,9 @@ func TestOpenRouterGenerateWithFunctionsRateLimitHandlingWith200Status(t *testin
 				"total_tokens": 35
 			}
 		}`))
+		if err != nil {
+			t.Errorf("Failed to write response: %v", err)
+		}
 	}))
 	defer server.Close()
 
@@ -395,7 +413,7 @@ func TestOpenRouterRateLimitHandlingWithMetadata(t *testing.T) {
 		// So we're not setting X-RateLimit headers in this test
 
 		// Return response with rate limit info in metadata
-		w.Write([]byte(fmt.Sprintf(`{
+		_, err := w.Write([]byte(fmt.Sprintf(`{
 			"id": "rate-limited-response",
 			"object": "chat.completion",
 			"created": 1677858242,
@@ -414,6 +432,9 @@ func TestOpenRouterRateLimitHandlingWithMetadata(t *testing.T) {
 				}
 			}
 		}`, resetTime)))
+		if err != nil {
+			t.Errorf("Failed to write response: %v", err)
+		}
 	}))
 	defer server.Close()
 
@@ -462,7 +483,7 @@ func TestOpenRouterGenerateWithFunctionsRateLimitHandlingWithMetadata(t *testing
 		// So we're not setting X-RateLimit headers in this test
 
 		// Return response with rate limit info in metadata
-		w.Write([]byte(fmt.Sprintf(`{
+		_, err := w.Write([]byte(fmt.Sprintf(`{
 			"id": "rate-limited-response",
 			"object": "chat.completion",
 			"created": 1677858242,
@@ -481,6 +502,9 @@ func TestOpenRouterGenerateWithFunctionsRateLimitHandlingWithMetadata(t *testing
 				}
 			}
 		}`, resetTime)))
+		if err != nil {
+			t.Errorf("Failed to write response: %v", err)
+		}
 	}))
 	defer server.Close()
 
@@ -560,7 +584,11 @@ func TestOpenRouterLLM_StreamGenerate(t *testing.T) {
 
 			// Write each chunk as an SSE message
 			for _, chunk := range chunks {
-				fmt.Fprintf(w, "data: %s\n\n", chunk)
+				_, err := fmt.Fprintf(w, "data: %s\n\n", chunk)
+				if err != nil {
+					t.Errorf("Failed to write chunk: %v", err)
+					return
+				}
 				if f, ok := w.(http.Flusher); ok {
 					f.Flush()
 				}
@@ -568,7 +596,11 @@ func TestOpenRouterLLM_StreamGenerate(t *testing.T) {
 			}
 
 			// Signal the end of the stream
-			fmt.Fprintf(w, "data: [DONE]\n\n")
+			_, err := fmt.Fprintf(w, "data: [DONE]\n\n")
+			if err != nil {
+				t.Errorf("Failed to write DONE signal: %v", err)
+				return
+			}
 			if f, ok := w.(http.Flusher); ok {
 				f.Flush()
 			}
@@ -630,7 +662,10 @@ func TestOpenRouterLLM_StreamGenerate(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// Send an error response
 			w.WriteHeader(http.StatusInternalServerError)
-			w.Write([]byte(`{"error":{"message":"Test error","code":500}}`))
+			_, err := w.Write([]byte(`{"error":{"message":"Test error","code":500}}`))
+			if err != nil {
+				t.Errorf("Failed to write response: %v", err)
+			}
 		}))
 		defer server.Close()
 

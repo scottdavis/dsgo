@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math/rand"
 	"os"
+	"path/filepath"
 	"sync"
 	"testing"
 	"time"
@@ -77,7 +78,7 @@ func TestSQLiteStore(t *testing.T) {
 	})
 
 	t.Run("Concurrent Access", func(t *testing.T) {
-		dbPath := "/tmp/test_ttl.db"
+		dbPath := filepath.Join(os.TempDir(), "test_ttl.db")
 		os.Remove(dbPath) // Clean up before test
 
 		store, err := NewSQLiteStore(dbPath)

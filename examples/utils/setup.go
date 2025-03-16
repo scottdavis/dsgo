@@ -21,7 +21,7 @@ func SetupLLM(apiKey string, modelOrConfig any) *core.DSPYConfig {
 		// Use the model ID directly
 		llm, err = llms.NewLLM(apiKey, v)
 	case *llms.OllamaConfig:
-		// Use a pre-configured Ollama config 
+		// Use a pre-configured Ollama config
 		llm, err = llms.NewLLM(apiKey, v)
 	case *llms.OpenRouterConfig:
 		// Use a pre-configured OpenRouter config
@@ -33,6 +33,6 @@ func SetupLLM(apiKey string, modelOrConfig any) *core.DSPYConfig {
 	if err != nil {
 		log.Fatalf("Failed to create LLM: %v", err)
 	}
-	
+
 	return core.NewDSPYConfig().WithDefaultLLM(llm)
 }

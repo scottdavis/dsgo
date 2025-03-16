@@ -1,4 +1,4 @@
-// Package dspy is a Go implementation of the DSPy framework for using language models
+// Package dsgo is a Go implementation of the DSPy framework for using language models
 // to solve complex tasks through composable steps and prompting techniques.
 //
 // DSGo provides a collection of modules, optimizers, and tools for building
@@ -21,8 +21,11 @@
 //		[]core.OutputField{{Field: core.Field{Name: "answer"}}},
 //	)
 //
+//	// Create a DSPYConfig with an LLM
+//	dspyConfig := core.NewDSPYConfig().WithDefaultLLM(llm)
+//
 //	// Create a chain-of-thought module
-//	cot := modules.NewChainOfThought(signature)
+//	cot := modules.NewChainOfThought(signature, dspyConfig)
 //
 //	// Create a program using the module
 //	program := core.NewProgram(
@@ -30,8 +33,9 @@
 //		func(ctx context.Context, inputs map[string]interface{}) (map[string]interface{}, error) {
 //			return cot.Process(ctx, inputs)
 //		},
+//		dspyConfig,
 //	)
 //
 // For more examples and detailed documentation, visit:
 // https://github.com/scottdavis/dsgo
-package dspy
+package dsgo

@@ -556,6 +556,7 @@ func (p *Predict) SetDemos(demos []core.Example) {
 }
 
 // formatDemos formats the demonstrations for the prompt.
+// nolint: unused
 func (p *Predict) formatDemos(ctx context.Context) string {
 	if len(p.Demos) == 0 {
 		return ""

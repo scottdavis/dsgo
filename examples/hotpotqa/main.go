@@ -340,7 +340,7 @@ func TestOpenRouterSetup() {
 
 func main() {
 	// Initialize logger at the start
-	output := logging.NewConsoleOutput()
+	output := logging.NewConsoleOutput(true)
 	fileOutput, err := logging.NewFileOutput("hotpotqa.log")
 	if err != nil {
 		fmt.Printf("Failed to create file output: %v\n", err)

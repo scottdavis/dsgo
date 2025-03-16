@@ -19,13 +19,13 @@ func TestPredict(t *testing.T) {
 	expectedResponse := &core.LLMResponse{
 		Content: "answer:\n\t42\n",
 	}
-	
+
 	// Set up the expected behavior
 	mockLLM.On("Generate", mock.Anything, mock.Anything, mock.Anything).Return(expectedResponse, nil)
 
 	// Create a config with the mock LLM
 	config := core.NewDSPYConfig().WithDefaultLLM(mockLLM)
-	
+
 	// Create a Predict module with the config
 	signature := core.NewSignature(
 		[]core.InputField{{Field: core.Field{Name: "question"}}},
@@ -46,7 +46,7 @@ func TestPredict(t *testing.T) {
 
 	// Verify that the mock was called as expected
 	mockLLM.AssertExpectations(t)
-	
+
 	// Verify traces
 	spans := core.CollectSpans(ctx)
 	require.Len(t, spans, 1)
