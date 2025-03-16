@@ -66,7 +66,7 @@ func TestNewOpenRouterLLM(t *testing.T) {
 				assert.Equal(t, openRouterBaseURL, endpoint.BaseURL)
 				assert.Equal(t, "/chat/completions", endpoint.Path)
 				assert.Contains(t, endpoint.Headers, "Authorization")
-				assert.Equal(t, tc.apiKey, endpoint.Headers["Authorization"])
+				assert.Equal(t, fmt.Sprintf("Bearer %s", tc.apiKey), endpoint.Headers["Authorization"])
 			}
 		})
 	}
@@ -538,7 +538,7 @@ func TestOpenRouterLLM_StreamGenerate(t *testing.T) {
 			assert.Equal(t, "POST", r.Method)
 			assert.Contains(t, r.URL.Path, "/chat/completions")
 			assert.Contains(t, r.Header.Get("Content-Type"), "application/json")
-			assert.NotEmpty(t, r.Header.Get("Authorization"))
+			assert.Contains(t, r.Header.Get("Authorization"), "Bearer")
 
 			// Set headers for SSE
 			w.Header().Set("Content-Type", "text/event-stream")

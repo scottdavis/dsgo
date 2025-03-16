@@ -62,7 +62,7 @@ func NewOpenRouterLLM(apiKey string, modelName string) (*OpenRouterLLM, error) {
 		Path:    "/chat/completions",
 		Headers: map[string]string{
 			"Content-Type":  "application/json",
-			"Authorization": strings.TrimSpace(apiKey),
+			"Authorization": fmt.Sprintf("Bearer %s", strings.TrimSpace(apiKey)),
 			"HTTP-Referer":  "https://github.com/XiaoConstantine/dspy-go", // Optional: identify your app
 		},
 		TimeoutSec: 10 * 60, // Default timeout
