@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
 	"math/rand"
 	"os"
 	"strings"
@@ -13,6 +12,7 @@ import (
 	"github.com/XiaoConstantine/dspy-go/examples/utils"
 	"github.com/XiaoConstantine/dspy-go/pkg/core"
 	"github.com/XiaoConstantine/dspy-go/pkg/datasets"
+	"github.com/XiaoConstantine/dspy-go/pkg/logging"
 	"github.com/XiaoConstantine/dspy-go/pkg/modules"
 	"github.com/XiaoConstantine/dspy-go/pkg/optimizers"
 	"github.com/sourcegraph/conc/pool"
@@ -47,9 +47,11 @@ func computeF1(prediction, groundTruth string) float64 {
 }
 
 func evaluateModel(program *core.Program, examples []datasets.HotPotQAExample) (float64, float64) {
+	logger := logging.GetLogger()
+	ctx := context.Background()
+
 	var totalF1, exactMatch float64
 	var validExamples int32
-	ctx := context.Background()
 
 	results := make(chan struct {
 		f1         float64
@@ -87,13 +89,13 @@ func evaluateModel(program *core.Program, examples []datasets.HotPotQAExample) (
 			fmt.Println("Starting new coroutine")
 			result, err := program.Execute(context.Background(), map[string]any{"question": example.Question})
 			if err != nil {
-				log.Printf("Error executing program: %v", err)
+				logger.Error(ctx, "Error executing program: %v", err)
 				return
 			}
 
 			predictedAnswer, ok := result["answer"].(string)
 			if !ok {
-				log.Printf("Error: predicted answer is not a string or is nil")
+				logger.Error(ctx, "Error: predicted answer is not a string or is nil")
 				return
 			}
 
@@ -119,7 +121,7 @@ func evaluateModel(program *core.Program, examples []datasets.HotPotQAExample) (
 		atomic.AddInt32(&validExamples, 1)
 	}
 	if validExamples == 0 {
-		log.Printf("Warning: No valid examples processed")
+		logger.Warn(ctx, "Warning: No valid examples processed")
 		return 0, 0
 	}
 
@@ -139,7 +141,7 @@ func RunHotPotQAExample() {
 
 	// Example 1: Using OpenRouterConfig
 	fmt.Println("=== Example 1: Using OpenRouterConfig ===")
-	
+
 	// Define multiple models to try in case of failure
 	modelOptions := []core.ModelID{
 		core.ModelID("openrouter:google/gemma-3-1b-it:free"),
@@ -153,16 +155,16 @@ func RunHotPotQAExample() {
 	for _, model := range modelOptions {
 		fmt.Printf("Attempting to set up model: %s\n", model)
 		dspyConfig = utils.SetupLLM(apiKey, model)
-		
+
 		// Test the model with a simple query
 		llm := dspyConfig.DefaultLLM
 		testCtx := context.Background()
-		
+
 		// Create a cancellable context with timeout
 		ctx, cancel := context.WithTimeout(testCtx, 30*time.Second)
 		testResp, err := llm.Generate(ctx, "Hello, can you respond with a short greeting?")
 		cancel()
-		
+
 		if err != nil {
 			if strings.Contains(err.Error(), "rate limited") {
 				fmt.Printf("Error with model %s: %v\n", model, err)
@@ -171,13 +173,13 @@ func RunHotPotQAExample() {
 				configError = err
 				continue // Try the next model
 			}
-			
+
 			// Log other types of errors
 			fmt.Printf("Error with model %s: %v\n", model, err)
 			configError = err
 			continue // Try the next model
 		}
-		
+
 		// Verify that the response has actual content
 		if testResp != nil && testResp.Content != "" {
 			fmt.Printf("Successfully connected to model: %s\n", model)
@@ -203,7 +205,8 @@ func RunHotPotQAExample() {
 
 	examples, err := datasets.LoadHotpotQA()
 	if err != nil {
-		log.Fatalf("Failed to load HotPotQA dataset: %v", err)
+		fmt.Printf("Failed to load HotPotQA dataset: %v\n", err)
+		os.Exit(1)
 	}
 
 	rand.Shuffle(len(examples), func(i, j int) { examples[i], examples[j] = examples[j], examples[i] })
@@ -241,7 +244,8 @@ func RunHotPotQAExample() {
 
 	compiledProgram, err := optimizer.Compile(context.Background(), program, program, trainset)
 	if err != nil {
-		log.Fatalf("Failed to compile program: %v", err)
+		fmt.Printf("Failed to compile program: %v\n", err)
+		os.Exit(1)
 	}
 
 	valF1, valExactMatch := evaluateModel(compiledProgram, valExamples)
@@ -254,7 +258,7 @@ func RunHotPotQAExample() {
 	for _, ex := range testExamples[:5] {
 		result, err := compiledProgram.Execute(context.Background(), map[string]any{"question": ex.Question})
 		if err != nil {
-			log.Printf("Error executing program: %v", err)
+			fmt.Printf("Error executing program: %v\n", err)
 			continue
 		}
 		fmt.Printf("Question: %s\n", ex.Question)
@@ -273,14 +277,10 @@ func TestOpenRouterSetup() {
 	}
 
 	fmt.Println("=== Testing OpenRouter Setup ===")
-	
+
 	// Define multiple models to try in case of failure
 	modelOptions := []core.ModelID{
 		core.ModelID("openrouter:google/gemma-3-1b-it:free"),
-		core.ModelID("openrouter:anthropic/claude-3-haiku:free"),
-		core.ModelID("openrouter:mistralai/mistral-large:free"),
-		core.ModelID("openrouter:anthropic/claude-3-sonnet:free"),
-		core.ModelID("openrouter:mistralai/mistral-small:free"),
 	}
 
 	var dspyConfig *core.DSPYConfig
@@ -291,16 +291,16 @@ func TestOpenRouterSetup() {
 	for _, model := range modelOptions {
 		fmt.Printf("Attempting to set up model: %s\n", model)
 		dspyConfig = utils.SetupLLM(apiKey, model)
-		
+
 		// Test the model with a simple query
 		llm := dspyConfig.DefaultLLM
 		testCtx := context.Background()
-		
+
 		// Create a cancellable context with timeout
 		ctx, cancel := context.WithTimeout(testCtx, 30*time.Second)
 		testResp, err := llm.Generate(ctx, "Hello, can you respond with a short greeting?")
 		cancel()
-		
+
 		if err != nil {
 			if strings.Contains(err.Error(), "rate limited") {
 				fmt.Printf("Error with model %s: %v\n", model, err)
@@ -309,13 +309,13 @@ func TestOpenRouterSetup() {
 				configError = err
 				continue // Try the next model
 			}
-			
+
 			// Log other types of errors
 			fmt.Printf("Error with model %s: %v\n", model, err)
 			configError = err
 			continue // Try the next model
 		}
-		
+
 		// Verify that the response has actual content
 		if testResp != nil && testResp.Content != "" {
 			fmt.Printf("Successfully connected to model: %s\n", model)
@@ -339,5 +339,19 @@ func TestOpenRouterSetup() {
 }
 
 func main() {
+	// Initialize logger at the start
+	output := logging.NewConsoleOutput()
+	fileOutput, err := logging.NewFileOutput("hotpotqa.log")
+	if err != nil {
+		fmt.Printf("Failed to create file output: %v\n", err)
+		os.Exit(1)
+	}
+
+	logger := logging.NewLogger(logging.Config{
+		Severity: logging.INFO,
+		Outputs:  []logging.Output{output, fileOutput},
+	})
+	logging.SetLogger(logger)
+
 	RunHotPotQAExample()
 }
