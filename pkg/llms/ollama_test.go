@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/scottdavis/dsgo/pkg/core"
 	ollamaApi "github.com/ollama/ollama/api"
+	"github.com/scottdavis/dsgo/pkg/core"
 	"github.com/stretchr/testify/assert"
 )
 

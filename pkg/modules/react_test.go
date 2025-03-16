@@ -18,12 +18,12 @@ func TestReAct(t *testing.T) {
 	firstResponse := &core.LLMResponse{
 		Content: "thought: I need to search for information\naction: Search\nobservation: ",
 	}
-	
+
 	// Set up the expected behavior for the second call (finish)
 	secondResponse := &core.LLMResponse{
 		Content: "thought: I found the answer\naction: Finish\nanswer: 42",
 	}
-	
+
 	// Configure the mock to return different responses on consecutive calls
 	mockLLM.On("Generate", mock.Anything, mock.Anything, mock.Anything).Return(firstResponse, nil).Once()
 	mockLLM.On("Generate", mock.Anything, mock.Anything, mock.Anything).Return(secondResponse, nil).Once()
@@ -31,8 +31,8 @@ func TestReAct(t *testing.T) {
 	// Create a mock tool
 	mockTool := testutil.NewMockTool("Search")
 	mockTool.On("Metadata").Return(&core.ToolMetadata{
-		Name:        "Search",
-		Description: "Search for information",
+		Name:         "Search",
+		Description:  "Search for information",
 		Capabilities: []string{"search"},
 	})
 	mockTool.On("CanHandle", mock.Anything, "Search").Return(true)
@@ -43,7 +43,7 @@ func TestReAct(t *testing.T) {
 
 	// Create a config with the mock LLM
 	config := core.NewDSPYConfig().WithDefaultLLM(mockLLM)
-	
+
 	// Create a ReAct module
 	signature := core.NewSignature(
 		[]core.InputField{{Field: core.Field{Name: "question"}}},

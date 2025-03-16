@@ -77,10 +77,10 @@ func TestCompileOptions(t *testing.T) {
 		[]InputField{{Field: Field{Name: "input"}}},
 		[]OutputField{{Field: Field{Name: "output"}}},
 	)
-	
+
 	mockModule := new(MockProgramModule)
 	mockModule.On("GetSignature").Return(sig).Maybe()
-	
+
 	teacherProgram := NewProgram(
 		map[string]Module{"test": mockModule},
 		func(ctx context.Context, inputs map[string]any) (map[string]any, error) {
@@ -107,11 +107,11 @@ func TestBootstrapFewShot(t *testing.T) {
 		[]InputField{{Field: Field{Name: "input"}}},
 		[]OutputField{{Field: Field{Name: "output"}}},
 	)
-	
+
 	mockModule := new(MockProgramModule)
 	mockModule.On("GetSignature").Return(sig).Maybe()
 	mockModule.On("Process", mock.Anything, mock.Anything).Return(map[string]any{"output": "test"}, nil).Maybe()
-	
+
 	program := NewProgram(
 		map[string]Module{"test": mockModule},
 		nil,
@@ -144,22 +144,22 @@ func TestBootstrapFewShot(t *testing.T) {
 // TestOptimizer tests the optimizer functionality.
 func TestOptimizer(t *testing.T) {
 	mockOptimizer := new(MockOptimizer)
-	
+
 	config := NewDSPYConfig()
 	sig := NewSignature(
 		[]InputField{{Field: Field{Name: "input"}}},
 		[]OutputField{{Field: Field{Name: "output"}}},
 	)
-	
+
 	mockModule := new(MockProgramModule)
 	mockModule.On("GetSignature").Return(sig).Maybe()
-	
+
 	program := NewProgram(
 		map[string]Module{"test": mockModule},
 		nil,
 		config,
 	)
-	
+
 	examples := []Example{
 		{
 			Input:  map[string]any{"input": "test1"},
@@ -167,17 +167,17 @@ func TestOptimizer(t *testing.T) {
 		},
 	}
 	dataset := NewMockDataset(examples)
-	
+
 	metric := func(ctx context.Context, result map[string]any) (bool, string) {
 		return true, ""
 	}
-	
+
 	// Set up expectations
 	mockOptimizer.On("Compile", mock.Anything, program, dataset, mock.Anything).Return(program, nil)
-	
+
 	// Test the optimizer
 	result, err := mockOptimizer.Compile(context.Background(), program, dataset, metric)
-	
+
 	assert.NoError(t, err)
 	assert.Equal(t, program, result)
 	mockOptimizer.AssertExpectations(t)
@@ -186,22 +186,22 @@ func TestOptimizer(t *testing.T) {
 // TestOptimizeProgram tests the OptimizeProgram function.
 func TestOptimizeProgram(t *testing.T) {
 	mockOptimizer := new(MockOptimizer)
-	
+
 	config := NewDSPYConfig()
 	sig := NewSignature(
 		[]InputField{{Field: Field{Name: "input"}}},
 		[]OutputField{{Field: Field{Name: "output"}}},
 	)
-	
+
 	mockModule := new(MockProgramModule)
 	mockModule.On("GetSignature").Return(sig).Maybe()
-	
+
 	program := NewProgram(
 		map[string]Module{"test": mockModule},
 		nil,
 		config,
 	)
-	
+
 	examples := []Example{
 		{
 			Input:  map[string]any{"input": "test1"},
@@ -209,18 +209,18 @@ func TestOptimizeProgram(t *testing.T) {
 		},
 	}
 	dataset := NewMockDataset(examples)
-	
+
 	metric := func(ctx context.Context, result map[string]any) (bool, string) {
 		return true, ""
 	}
-	
+
 	// Set up expectations
 	mockOptimizer.On("Compile", mock.Anything, program, dataset, mock.Anything).Return(program, nil)
-	
+
 	// Test OptimizeProgram
 	result, err := OptimizeProgram(context.Background(), program, mockOptimizer, dataset, metric)
-	
+
 	assert.NoError(t, err)
 	assert.Equal(t, program, result)
 	mockOptimizer.AssertExpectations(t)
-} 
+}

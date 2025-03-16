@@ -109,7 +109,7 @@ func (p *Program) Equal(other *Program) bool {
 			return false
 		}
 	}
-	
+
 	// Compare demonstrations
 	if len(p.Demonstrations) != len(other.Demonstrations) {
 		return false
@@ -119,7 +119,7 @@ func (p *Program) Equal(other *Program) bool {
 			return false
 		}
 	}
-	
+
 	return true
 }
 

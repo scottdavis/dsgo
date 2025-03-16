@@ -9,10 +9,10 @@ import (
 	"io"
 	"net/http"
 
+	"github.com/ollama/ollama/api"
 	"github.com/scottdavis/dsgo/pkg/core"
 	"github.com/scottdavis/dsgo/pkg/errors"
 	"github.com/scottdavis/dsgo/pkg/utils"
-	"github.com/ollama/ollama/api"
 )
 
 // OllamaLLM implements the core.LLM interface for Ollama-hosted models.

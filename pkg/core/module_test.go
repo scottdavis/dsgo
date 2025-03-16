@@ -104,7 +104,7 @@ func TestBaseModule(t *testing.T) {
 	if !reflect.DeepEqual(clone.GetSignature(), bm.GetSignature()) {
 		t.Error("Cloned module does not have the same signature")
 	}
-	
+
 	// Test with nil config
 	bmNilConfig := NewModule(sig, nil)
 	if bmNilConfig.Config == nil {

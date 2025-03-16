@@ -21,7 +21,7 @@ func main() {
 	fmt.Println("=== Example 1: Using OpenRouterConfig ===")
 	// Create an OpenRouter config with a specific model
 	config := llms.NewOpenRouterConfig("google/gemma-3-27b-it:free")
-	
+
 	// Create the LLM using the factory
 	llm, err := llms.NewLLM(apiKey, config)
 	if err != nil {
@@ -30,7 +30,7 @@ func main() {
 	}
 
 	// Generate text using the LLM
-	response, err := llm.Generate(context.Background(), "What are three interesting applications of LLMs in healthcare?", 
+	response, err := llm.Generate(context.Background(), "What are three interesting applications of LLMs in healthcare?",
 		core.WithMaxTokens(300),
 		core.WithTemperature(0.7),
 	)
@@ -40,9 +40,9 @@ func main() {
 	}
 
 	fmt.Printf("Response from %s:\n%s\n\n", llm.ModelID(), response.Content)
-	fmt.Printf("Token usage - Prompt: %d, Completion: %d, Total: %d\n\n", 
-		response.Usage.PromptTokens, 
-		response.Usage.CompletionTokens, 
+	fmt.Printf("Token usage - Prompt: %d, Completion: %d, Total: %d\n\n",
+		response.Usage.PromptTokens,
+		response.Usage.CompletionTokens,
 		response.Usage.TotalTokens,
 	)
 
@@ -50,7 +50,7 @@ func main() {
 	fmt.Println("=== Example 2: Using ModelID string format ===")
 	// Alternatively, you can use the string format
 	modelID := core.ModelID("openrouter:google/gemma-3-27b-it:free")
-	
+
 	// Create the LLM using the factory with the string format
 	llm2, err := llms.NewLLM(apiKey, modelID)
 	if err != nil {
@@ -59,7 +59,7 @@ func main() {
 	}
 
 	// Generate text using the LLM
-	response2, err := llm2.Generate(context.Background(), "Explain quantum computing in simple terms", 
+	response2, err := llm2.Generate(context.Background(), "Explain quantum computing in simple terms",
 		core.WithMaxTokens(200),
 		core.WithTemperature(0.5),
 	)
@@ -69,9 +69,9 @@ func main() {
 	}
 
 	fmt.Printf("Response from %s:\n%s\n\n", llm2.ModelID(), response2.Content)
-	fmt.Printf("Token usage - Prompt: %d, Completion: %d, Total: %d\n", 
-		response2.Usage.PromptTokens, 
-		response2.Usage.CompletionTokens, 
+	fmt.Printf("Token usage - Prompt: %d, Completion: %d, Total: %d\n",
+		response2.Usage.PromptTokens,
+		response2.Usage.CompletionTokens,
 		response2.Usage.TotalTokens,
 	)
-} 
+}

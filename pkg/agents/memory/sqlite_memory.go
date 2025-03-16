@@ -8,9 +8,9 @@ import (
 	"sync"
 	"time"
 
+	_ "github.com/mattn/go-sqlite3"
 	"github.com/scottdavis/dsgo/pkg/errors"
 	"github.com/scottdavis/dsgo/pkg/logging"
-	_ "github.com/mattn/go-sqlite3"
 )
 
 // SQLiteStore implements the Memory interface using SQLite as the backend.

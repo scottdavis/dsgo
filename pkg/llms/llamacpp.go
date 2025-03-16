@@ -92,9 +92,9 @@ type llamacppEmbeddingRequest struct {
 
 type llamacppBatchEmbeddingRequest struct {
 	// Multiple inputs for batch processing
-	Inputs     []string               `json:"inputs"`
-	Model      string                 `json:"model,omitempty"`
-	Normalize  bool                   `json:"normalize,omitempty"`
+	Inputs     []string       `json:"inputs"`
+	Model      string         `json:"model,omitempty"`
+	Normalize  bool           `json:"normalize,omitempty"`
 	Parameters map[string]any `json:"parameters,omitempty"`
 }
 

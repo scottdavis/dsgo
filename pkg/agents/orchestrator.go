@@ -138,7 +138,7 @@ func NewFlexibleOrchestrator(memory Memory, config OrchestrationConfig, dspyConf
 	if dspyConfig == nil {
 		dspyConfig = core.NewDSPYConfig()
 	}
-	
+
 	// Set defaults
 	if config.MaxConcurrent <= 0 {
 		config.MaxConcurrent = 5 // Default to 5 concurrent tasks

@@ -29,13 +29,13 @@ func NewBootstrapFewShot(metric func(example map[string]any, prediction map[stri
 
 func (b *BootstrapFewShot) Compile(ctx context.Context, student, teacher *core.Program, trainset []map[string]any) (*core.Program, error) {
 	compiledStudent := student.Clone()
-	
+
 	// Use the teacher LLM from config if available, otherwise use default LLM
 	teacherLLM := b.Config.TeacherLLM
 	if teacherLLM == nil {
 		teacherLLM = b.Config.DefaultLLM
 	}
-	
+
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -134,11 +134,11 @@ func (b *BootstrapFewShot) Compile(ctx context.Context, student, teacher *core.P
 func (b *BootstrapFewShot) predictWithTeacher(ctx context.Context, teacher *core.Program, teacherLLM core.LLM, example map[string]any) (map[string]any, error) {
 	// Create a temporary config with the teacher LLM
 	tempConfig := core.NewDSPYConfig().WithDefaultLLM(teacherLLM)
-	
+
 	// Set the config on the teacher program
 	teacherClone := teacher.Clone()
 	teacherClone.Config = tempConfig
-	
+
 	// Execute the teacher program
 	return teacherClone.Execute(ctx, example)
 }

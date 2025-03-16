@@ -61,7 +61,7 @@ func createMockDataset() *MockDataset {
 func TestNewMIPRO(t *testing.T) {
 	metric := func(example, prediction map[string]any, ctx context.Context) float64 { return 0 }
 	mockLLM := setupMockLLM()
-	
+
 	mipro := NewMIPRO(metric,
 		WithNumCandidates(20),
 		WithMaxBootstrappedDemos(10),
@@ -89,12 +89,12 @@ func TestMIPRO_Compile(t *testing.T) {
 	ctx := core.WithExecutionState(context.Background())
 	mockLLM := setupMockLLM()
 	dataset := createMockDataset()
-	
+
 	// Set up a simple metric function
 	metric := func(ctx context.Context, result map[string]any) (bool, string) {
 		return true, ""
 	}
-	
+
 	// Create MIPRO with minimal trials for faster testing
 	mipro := NewMIPRO(
 		func(example, prediction map[string]any, ctx context.Context) float64 { return 1.0 },
@@ -106,16 +106,16 @@ func TestMIPRO_Compile(t *testing.T) {
 		WithTaskModel(mockLLM),
 		WithMiniBatchSize(1),
 	)
-	
+
 	// Create a test program
 	config := core.NewDSPYConfig().WithDefaultLLM(mockLLM)
 	sig := core.NewSignature(
 		[]core.InputField{{Field: core.Field{Name: "input"}}},
 		[]core.OutputField{{Field: core.Field{Name: "output"}}},
 	)
-	
+
 	predict := modules.NewPredict(sig, config)
-	
+
 	program := core.NewProgram(
 		map[string]core.Module{"predict": predict},
 		func(ctx context.Context, inputs map[string]any) (map[string]any, error) {
@@ -123,10 +123,10 @@ func TestMIPRO_Compile(t *testing.T) {
 		},
 		config,
 	)
-	
+
 	// Execute the test
 	compiled, err := mipro.Compile(ctx, program, dataset, metric)
-	
+
 	assert.NoError(t, err)
 	assert.NotNil(t, compiled)
 }
@@ -136,26 +136,26 @@ func TestMIPRO_CompileErrors(t *testing.T) {
 		ctx := context.Background()
 		mockLLM := setupMockLLM()
 		emptyDataset := NewMockDataset([]core.Example{})
-		
+
 		metric := func(ctx context.Context, result map[string]any) (bool, string) {
 			return true, ""
 		}
-		
+
 		mipro := NewMIPRO(
 			func(example, prediction map[string]any, ctx context.Context) float64 { return 1.0 },
 			WithNumCandidates(1),
 			WithMaxBootstrappedDemos(1),
 			WithPromptModel(mockLLM),
 		)
-		
+
 		config := core.NewDSPYConfig().WithDefaultLLM(mockLLM)
 		sig := core.NewSignature(
 			[]core.InputField{{Field: core.Field{Name: "input"}}},
 			[]core.OutputField{{Field: core.Field{Name: "output"}}},
 		)
-		
+
 		predict := modules.NewPredict(sig, config)
-		
+
 		program := core.NewProgram(
 			map[string]core.Module{"predict": predict},
 			func(ctx context.Context, inputs map[string]any) (map[string]any, error) {
@@ -163,7 +163,7 @@ func TestMIPRO_CompileErrors(t *testing.T) {
 			},
 			config,
 		)
-		
+
 		// Should handle empty dataset gracefully
 		_, err := mipro.Compile(ctx, program, emptyDataset, metric)
 		assert.Error(t, err)
@@ -173,26 +173,26 @@ func TestMIPRO_CompileErrors(t *testing.T) {
 
 func TestMIPRO_generateTrial(t *testing.T) {
 	mipro := NewMIPRO(nil)
-	
+
 	config := core.NewDSPYConfig()
 	sig := core.NewSignature(
 		[]core.InputField{{Field: core.Field{Name: "input"}}},
 		[]core.OutputField{{Field: core.Field{Name: "output"}}},
 	)
-	
+
 	modules := []core.Module{
 		modules.NewPredict(sig, config),
 		modules.NewPredict(sig, config),
 	}
 
 	trial := mipro.generateTrial(modules, 5, 5)
-	
+
 	assert.Len(t, trial.Params, 4)
 	assert.Contains(t, trial.Params, "instruction_0")
 	assert.Contains(t, trial.Params, "instruction_1")
 	assert.Contains(t, trial.Params, "demo_0")
 	assert.Contains(t, trial.Params, "demo_1")
-	
+
 	// Check that values are within expected ranges
 	assert.GreaterOrEqual(t, trial.Params["instruction_0"], 0)
 	assert.Less(t, trial.Params["instruction_0"], 5)
@@ -203,7 +203,7 @@ func TestMIPRO_generateTrial(t *testing.T) {
 func TestMIPRO_constructProgram(t *testing.T) {
 	mipro := NewMIPRO(nil)
 	config := core.NewDSPYConfig()
-	
+
 	// Create a base program
 	sig1 := core.NewSignature(
 		[]core.InputField{{Field: core.Field{Name: "input1"}}},
@@ -213,10 +213,10 @@ func TestMIPRO_constructProgram(t *testing.T) {
 		[]core.InputField{{Field: core.Field{Name: "input2"}}},
 		[]core.OutputField{{Field: core.Field{Name: "output2"}}},
 	)
-	
+
 	predict1 := modules.NewPredict(sig1, config)
 	predict2 := modules.NewPredict(sig2, config)
-	
+
 	baseProgram := core.NewProgram(
 		map[string]core.Module{
 			"predict1": predict1,
@@ -225,7 +225,7 @@ func TestMIPRO_constructProgram(t *testing.T) {
 		nil,
 		config,
 	)
-	
+
 	// Create a trial with specific parameters
 	trial := Trial{
 		Params: map[string]int{
@@ -235,13 +235,13 @@ func TestMIPRO_constructProgram(t *testing.T) {
 			"demo_1":        1,
 		},
 	}
-	
+
 	// Create instruction candidates
 	instructionCandidates := [][]string{
 		{"Instruction1", "Instruction2"},
 		{"Instruction3", "Instruction4"},
 	}
-	
+
 	// Create demo candidates
 	demoCandidates := [][][]core.Example{
 		{
@@ -261,12 +261,12 @@ func TestMIPRO_constructProgram(t *testing.T) {
 			},
 		},
 	}
-	
+
 	// Construct a new program using the trial
 	result := mipro.constructProgram(baseProgram, trial, instructionCandidates, demoCandidates)
-	
+
 	// Verify the result
 	assert.NotNil(t, result)
 	assert.NotSame(t, baseProgram, result, "Should return a new program instance")
 	assert.Len(t, result.Modules, 2)
-} 
+}
