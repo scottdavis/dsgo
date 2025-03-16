@@ -3,7 +3,7 @@ package utils
 import (
 	"encoding/json"
 
-	"github.com/XiaoConstantine/dspy-go/pkg/errors"
+	"github.com/scottdavis/dsgo/pkg/errors"
 )
 
 // ParseJSONResponse attempts to parse a string response as JSON.

@@ -1,7 +1,7 @@
 // Package dspy is a Go implementation of the DSPy framework for using language models
 // to solve complex tasks through composable steps and prompting techniques.
 //
-// DSPy-Go provides a collection of modules, optimizers, and tools for building
+// DSGo provides a collection of modules, optimizers, and tools for building
 // reliable LLM-powered applications. It focuses on making it easy to:
 //   - Break down complex tasks into modular steps
 //   - Optimize prompts and chain-of-thought reasoning
@@ -33,5 +33,5 @@
 //	)
 //
 // For more examples and detailed documentation, visit:
-// https://github.com/XiaoConstantine/dspy-go
+// https://github.com/scottdavis/dsgo
 package dspy

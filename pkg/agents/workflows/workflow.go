@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/XiaoConstantine/dspy-go/pkg/agents"
+	"github.com/scottdavis/dsgo/pkg/agents"
 )
 
 // Workflow represents a sequence of steps that accomplish a task.

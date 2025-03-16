@@ -5,11 +5,11 @@ import (
 	"flag"
 	"strings"
 
-	"github.com/XiaoConstantine/dspy-go/pkg/core"
-	"github.com/XiaoConstantine/dspy-go/pkg/llms"
-	"github.com/XiaoConstantine/dspy-go/pkg/logging"
-	"github.com/XiaoConstantine/dspy-go/pkg/modules"
-	"github.com/XiaoConstantine/dspy-go/pkg/optimizers"
+	"github.com/scottdavis/dsgo/pkg/core"
+	"github.com/scottdavis/dsgo/pkg/llms"
+	"github.com/scottdavis/dsgo/pkg/logging"
+	"github.com/scottdavis/dsgo/pkg/modules"
+	"github.com/scottdavis/dsgo/pkg/optimizers"
 )
 
 // SimpleDataset implements the core.Dataset interface for MIPRO

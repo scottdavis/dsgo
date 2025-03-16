@@ -6,7 +6,7 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/XiaoConstantine/dspy-go/pkg/core"
+	"github.com/scottdavis/dsgo/pkg/core"
 	"github.com/sourcegraph/conc/pool"
 )
 

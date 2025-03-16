@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/XiaoConstantine/dspy-go/pkg/core"
-	"github.com/XiaoConstantine/dspy-go/pkg/logging"
+	"github.com/scottdavis/dsgo/pkg/core"
+	"github.com/scottdavis/dsgo/pkg/logging"
 )
 
 type ReAct struct {

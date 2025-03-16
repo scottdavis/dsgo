@@ -8,13 +8,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/XiaoConstantine/dspy-go/pkg/agents"
-	"github.com/XiaoConstantine/dspy-go/pkg/core"
-	"github.com/XiaoConstantine/dspy-go/pkg/modules"
+	"github.com/scottdavis/dsgo/pkg/agents"
+	"github.com/scottdavis/dsgo/pkg/core"
+	"github.com/scottdavis/dsgo/pkg/modules"
 
-	workflows "github.com/XiaoConstantine/dspy-go/pkg/agents/workflows"
-	"github.com/XiaoConstantine/dspy-go/pkg/llms"
-	"github.com/XiaoConstantine/dspy-go/pkg/logging"
+	workflows "github.com/scottdavis/dsgo/pkg/agents/workflows"
+	"github.com/scottdavis/dsgo/pkg/llms"
+	"github.com/scottdavis/dsgo/pkg/logging"
 )
 
 func RunChainExample(ctx context.Context, logger *logging.Logger, dspyConfig *core.DSPYConfig) {
@@ -420,22 +420,22 @@ func main() {
 	logger.Warn(ctx, "This is a warning message")
 
 	// Create an Ollama configuration with custom host and model
-	//ollamaConfig := llms.NewOllamaConfig("http://192.168.1.199:11434", "gemma3:27b")
+	ollamaConfig := llms.NewOllamaConfig("http://192.168.1.39:11434", "phi4-mini:latest")
 
 	// Get API key from environment
-	apiKey := os.Getenv("OPENROUTER_API_KEY")
-	if apiKey == "" {
-		fmt.Println("Please set OPENROUTER_API_KEY environment variable")
-		os.Exit(1)
-	}
+	//apiKey := os.Getenv("OPENROUTER_API_KEY")
+	//if apiKey == "" {
+	//	fmt.Println("Please set OPENROUTER_API_KEY environment variable")
+	//	os.Exit(1)
+	//}
 
 	// Example 1: Using OpenRouterConfig
-	fmt.Println("=== Example 1: Using OpenRouterConfig ===")
+	//fmt.Println("=== Example 1: Using OpenRouterConfig ===")
 	// Create a model ID string with the openrouter prefix
-	modelID := core.ModelID("openrouter:deepseek/deepseek-r1:free")
+	//modelID := core.ModelID("openrouter:deepseek/deepseek-r1:free")
 
 	// Create the LLM directly using the model ID
-	llm, err := llms.NewLLM(apiKey, modelID)
+	llm, err := llms.NewLLM("apiKey", ollamaConfig)
 	if err != nil {
 		fmt.Printf("Error creating LLM: %v\n", err)
 		os.Exit(1)

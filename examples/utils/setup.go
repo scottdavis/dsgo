@@ -3,8 +3,8 @@ package utils
 import (
 	"log"
 
-	"github.com/XiaoConstantine/dspy-go/pkg/core"
-	"github.com/XiaoConstantine/dspy-go/pkg/llms"
+	"github.com/scottdavis/dsgo/pkg/core"
+	"github.com/scottdavis/dsgo/pkg/llms"
 )
 
 // SetupLLM creates a new LLM and returns a DSPYConfig with that LLM configured as default

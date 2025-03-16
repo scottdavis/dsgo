@@ -1,6 +1,6 @@
 # OpenRouter Example
 
-This example demonstrates how to use the OpenRouter integration with dspy-go.
+This example demonstrates how to use the OpenRouter integration with dsgo.
 
 ## What is OpenRouter?
 

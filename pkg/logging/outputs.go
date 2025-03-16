@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/XiaoConstantine/dspy-go/pkg/core"
+	"github.com/scottdavis/dsgo/pkg/core"
 )
 
 type fileWriter interface {

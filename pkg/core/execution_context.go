@@ -53,7 +53,7 @@ type spanIDGenerator struct {
 	lastTimestamp int64
 }
 
-// ExecutionContextKey is the type for context keys specific to dspy-go.
+// ExecutionContextKey is the type for context keys specific to dsgo.
 type ExecutionContextKey struct {
 	name string
 }
@@ -63,7 +63,7 @@ var (
 	defaultGenerator = &spanIDGenerator{}
 )
 
-// WithExecutionState creates a new context with dspy-go execution state.
+// WithExecutionState creates a new context with dsgo execution state.
 func WithExecutionState(ctx context.Context) context.Context {
 	if GetExecutionState(ctx) != nil {
 		return ctx // State already exists

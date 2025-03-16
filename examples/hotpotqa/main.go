@@ -9,12 +9,12 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/XiaoConstantine/dspy-go/examples/utils"
-	"github.com/XiaoConstantine/dspy-go/pkg/core"
-	"github.com/XiaoConstantine/dspy-go/pkg/datasets"
-	"github.com/XiaoConstantine/dspy-go/pkg/logging"
-	"github.com/XiaoConstantine/dspy-go/pkg/modules"
-	"github.com/XiaoConstantine/dspy-go/pkg/optimizers"
+	"github.com/scottdavis/dsgo/examples/utils"
+	"github.com/scottdavis/dsgo/pkg/core"
+	"github.com/scottdavis/dsgo/pkg/datasets"
+	"github.com/scottdavis/dsgo/pkg/logging"
+	"github.com/scottdavis/dsgo/pkg/modules"
+	"github.com/scottdavis/dsgo/pkg/optimizers"
 	"github.com/sourcegraph/conc/pool"
 )
 

@@ -7,10 +7,10 @@ import (
 	"strings"
 
 	"github.com/XiaoConstantine/anthropic-go/anthropic"
-	"github.com/XiaoConstantine/dspy-go/pkg/core"
-	"github.com/XiaoConstantine/dspy-go/pkg/errors"
-	"github.com/XiaoConstantine/dspy-go/pkg/logging"
-	"github.com/XiaoConstantine/dspy-go/pkg/utils"
+	"github.com/scottdavis/dsgo/pkg/core"
+	"github.com/scottdavis/dsgo/pkg/errors"
+	"github.com/scottdavis/dsgo/pkg/logging"
+	"github.com/scottdavis/dsgo/pkg/utils"
 )
 
 // AnthropicLLM implements the core.LLM interface for Anthropic's models.

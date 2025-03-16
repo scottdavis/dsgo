@@ -13,9 +13,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/XiaoConstantine/dspy-go/pkg/core"
-	"github.com/XiaoConstantine/dspy-go/pkg/errors"
-	"github.com/XiaoConstantine/dspy-go/pkg/utils"
+	"github.com/scottdavis/dsgo/pkg/core"
+	"github.com/scottdavis/dsgo/pkg/errors"
+	"github.com/scottdavis/dsgo/pkg/utils"
 )
 
 // OpenRouterConfig represents configuration for an OpenRouter client
@@ -50,6 +50,9 @@ func NewOpenRouterLLM(apiKey string, modelName string) (*OpenRouterLLM, error) {
 		return nil, errors.New(errors.InvalidInput, "OpenRouter model name is required")
 	}
 
+	// Clean the API key - remove any whitespace
+	apiKey = strings.TrimSpace(apiKey)
+
 	capabilities := []core.Capability{
 		core.CapabilityCompletion,
 		core.CapabilityChat,
@@ -62,11 +65,15 @@ func NewOpenRouterLLM(apiKey string, modelName string) (*OpenRouterLLM, error) {
 		Path:    "/chat/completions",
 		Headers: map[string]string{
 			"Content-Type":  "application/json",
-			"Authorization": fmt.Sprintf("Bearer %s", strings.TrimSpace(apiKey)),
-			"HTTP-Referer":  "https://github.com/XiaoConstantine/dspy-go", // Optional: identify your app
+			"Authorization": "Bearer " + apiKey,
+			"Http-Referer":  "https://github.com/scottdavis/dsgo", // Note: capital 'H' in Http
+			"X-Title":       "DSPY-Go",
 		},
 		TimeoutSec: 10 * 60, // Default timeout
 	}
+
+	// Comment out debug log
+	// log.Printf("DEBUG: Authorization header value: %s", endpointCfg.Headers["Authorization"])
 
 	return &OpenRouterLLM{
 		apiKey:  apiKey,
@@ -163,6 +170,19 @@ func formatResetTime(resetTimeMs string) string {
 	return fmt.Sprintf("%.2f hours (resets at %s)", hoursUntilReset, resetTimeFormatted)
 }
 
+// Helper function to dump HTTP request for debugging
+func dumpRequest(req *http.Request) {
+	// Comment out entire function content to disable dumping
+	/*
+		dump, err := httputil.DumpRequestOut(req, false) // Don't dump body as it might contain sensitive data
+		if err != nil {
+			log.Printf("Error dumping request: %v", err)
+			return
+		}
+		log.Printf("DEBUG: HTTP Request: %s", string(dump))
+	*/
+}
+
 // Generate implements the core.LLM interface.
 func (o *OpenRouterLLM) Generate(ctx context.Context, prompt string, options ...core.GenerateOption) (*core.LLMResponse, error) {
 	opts := core.NewGenerateOptions()
@@ -204,7 +224,18 @@ func (o *OpenRouterLLM) Generate(ctx context.Context, prompt string, options ...
 
 	for key, value := range endpoint.Headers {
 		req.Header.Set(key, value)
+		// Comment out debug logging for headers
+		/*
+			if key == "Authorization" && len(value) > 15 {
+				// Show only beginning and end of API key for security
+				debugValue := value[:12] + "..." + value[len(value)-5:]
+				log.Printf("DEBUG: Using Authorization header: %s", debugValue)
+			}
+		*/
 	}
+
+	// Comment out request dump
+	// dumpRequest(req)
 
 	client := o.GetHTTPClient()
 	resp, err := client.Do(req)
@@ -215,12 +246,14 @@ func (o *OpenRouterLLM) Generate(ctx context.Context, prompt string, options ...
 	}
 	defer resp.Body.Close()
 
-	// Print response headers for debugging
-	log.Printf("OpenRouter response headers for model %s:", o.ModelID())
-	for name, values := range resp.Header {
-		for _, value := range values {
-			log.Printf("  %s: %s", name, value)
-		}
+	// Keep minimal header logging but reduce verbosity
+	log.Printf("OpenRouter API request to model %s", o.ModelID())
+
+	// Check for JWT warning but make it less verbose
+	jwtWarningMsg := resp.Header.Get("X-Clerk-Auth-Message")
+	if strings.Contains(jwtWarningMsg, "Invalid JWT form") {
+		// Keep a condensed version of the warning
+		log.Printf("NOTE: OpenRouter JWT warning received (non-fatal)")
 	}
 
 	// Read the response body
@@ -233,13 +266,6 @@ func (o *OpenRouterLLM) Generate(ctx context.Context, prompt string, options ...
 
 	// Create a new reader from the bytes for json.Decoder
 	bodyReader := bytes.NewReader(bodyBytes)
-
-	// Log the response body (limited to first 1000 chars to avoid overwhelming logs)
-	bodyPreview := string(bodyBytes)
-	if len(bodyPreview) > 1000 {
-		bodyPreview = bodyPreview[:1000] + "... [truncated]"
-	}
-	log.Printf("OpenRouter response body for model %s:\n%s", o.ModelID(), bodyPreview)
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, errors.WithFields(
@@ -286,14 +312,16 @@ func (o *OpenRouterLLM) Generate(ctx context.Context, prompt string, options ...
 			errors.Fields{"model": o.ModelID(), "error_code": openRouterResp.Error.Code})
 	}
 
-	// Print metadata for debugging
+	// Print metadata for debugging - make it less verbose
 	if openRouterResp.Meta != nil && openRouterResp.Meta.RateLimit != nil {
-		log.Printf("OpenRouter metadata rate limits for model %s:", o.ModelID())
-		log.Printf("  Limit: %d", openRouterResp.Meta.RateLimit.Limit)
-		log.Printf("  Remaining: %d", openRouterResp.Meta.RateLimit.Remaining)
-		log.Printf("  Reset: %d", openRouterResp.Meta.RateLimit.Reset)
-	} else {
-		log.Printf("No rate limit metadata found in response for model %s", o.ModelID())
+		// Only log if remaining is low (below 10%)
+		if openRouterResp.Meta.RateLimit.Limit > 0 &&
+			float64(openRouterResp.Meta.RateLimit.Remaining)/float64(openRouterResp.Meta.RateLimit.Limit) < 0.1 {
+			log.Printf("OpenRouter rate limit warning for model %s: %d/%d requests remaining",
+				o.ModelID(),
+				openRouterResp.Meta.RateLimit.Remaining,
+				openRouterResp.Meta.RateLimit.Limit)
+		}
 	}
 
 	if len(openRouterResp.Choices) == 0 {
@@ -425,12 +453,14 @@ func (o *OpenRouterLLM) GenerateWithFunctions(ctx context.Context, prompt string
 	}
 	defer resp.Body.Close()
 
-	// Print response headers for debugging
-	log.Printf("OpenRouter response headers for model %s (with functions):", o.ModelID())
-	for name, values := range resp.Header {
-		for _, value := range values {
-			log.Printf("  %s: %s", name, value)
-		}
+	// Keep minimal header logging but reduce verbosity
+	log.Printf("OpenRouter API function request to model %s", o.ModelID())
+
+	// Check for JWT warning but make it less verbose
+	jwtWarningMsg := resp.Header.Get("X-Clerk-Auth-Message")
+	if strings.Contains(jwtWarningMsg, "Invalid JWT form") {
+		// Keep a condensed version of the warning
+		log.Printf("NOTE: OpenRouter JWT warning received (non-fatal)")
 	}
 
 	// Read the response body
@@ -443,13 +473,6 @@ func (o *OpenRouterLLM) GenerateWithFunctions(ctx context.Context, prompt string
 
 	// Create a new reader from the bytes for json.Decoder
 	bodyReader := bytes.NewReader(bodyBytes)
-
-	// Log the response body (limited to first 1000 chars to avoid overwhelming logs)
-	bodyPreview := string(bodyBytes)
-	if len(bodyPreview) > 1000 {
-		bodyPreview = bodyPreview[:1000] + "... [truncated]"
-	}
-	log.Printf("OpenRouter response body for model %s (with functions):\n%s", o.ModelID(), bodyPreview)
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, errors.WithFields(
@@ -503,22 +526,19 @@ func (o *OpenRouterLLM) GenerateWithFunctions(ctx context.Context, prompt string
 			errors.Fields{"model": o.ModelID()})
 	}
 
-	// Print metadata for debugging
+	// Simplify metadata logging for rate limits
 	if meta, hasMeta := result["meta"].(map[string]any); hasMeta {
 		if rateLimit, hasRateLimit := meta["rate_limit"].(map[string]any); hasRateLimit {
-			log.Printf("OpenRouter metadata rate limits for model %s (with functions):", o.ModelID())
-			if limit, ok := rateLimit["limit"].(float64); ok {
-				log.Printf("  Limit: %f", limit)
-			}
-			if remaining, ok := rateLimit["remaining"].(float64); ok {
-				log.Printf("  Remaining: %f", remaining)
-			}
-			if reset, ok := rateLimit["reset"].(float64); ok {
-				log.Printf("  Reset: %f", reset)
+			// Only log if remaining is low (below 10%)
+			if limit, hasLimit := rateLimit["limit"].(float64); hasLimit && limit > 0 {
+				if remaining, hasRemaining := rateLimit["remaining"].(float64); hasRemaining {
+					if remaining/limit < 0.1 {
+						log.Printf("OpenRouter rate limit warning for model %s: %.0f/%.0f requests remaining",
+							o.ModelID(), remaining, limit)
+					}
+				}
 			}
 		}
-	} else {
-		log.Printf("No rate limit metadata found in response for model %s (with functions)", o.ModelID())
 	}
 
 	if len(result["choices"].([]any)) == 0 {
@@ -685,6 +705,13 @@ func (o *OpenRouterLLM) StreamGenerate(ctx context.Context, prompt string, optio
 			return
 		}
 		defer httpResp.Body.Close()
+
+		// Check for JWT warning but make it less verbose
+		jwtWarningMsg := httpResp.Header.Get("X-Clerk-Auth-Message")
+		if strings.Contains(jwtWarningMsg, "Invalid JWT form") {
+			// Leave a minimal note about the JWT warning
+			log.Printf("NOTE: OpenRouter stream JWT warning received (non-fatal)")
+		}
 
 		// Check for API errors
 		if httpResp.StatusCode != http.StatusOK {

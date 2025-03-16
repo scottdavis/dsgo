@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/XiaoConstantine/anthropic-go/anthropic"
-	"github.com/XiaoConstantine/dspy-go/pkg/errors"
+	"github.com/scottdavis/dsgo/pkg/errors"
 )
 
 type TokenInfo struct {

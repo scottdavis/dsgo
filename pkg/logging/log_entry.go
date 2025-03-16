@@ -3,7 +3,7 @@ package logging
 import (
 	"context"
 
-	"github.com/XiaoConstantine/dspy-go/pkg/core"
+	"github.com/scottdavis/dsgo/pkg/core"
 )
 
 // contextKey is a custom type for context keys to avoid collisions.

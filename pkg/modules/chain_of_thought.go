@@ -3,7 +3,7 @@ package modules
 import (
 	"context"
 
-	"github.com/XiaoConstantine/dspy-go/pkg/core"
+	"github.com/scottdavis/dsgo/pkg/core"
 )
 
 type ChainOfThought struct {

@@ -1,4 +1,4 @@
-module github.com/XiaoConstantine/dspy-go
+module github.com/scottdavis/dsgo
 
 go 1.24.0
 

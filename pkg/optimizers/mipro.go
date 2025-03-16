@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"math/rand"
 
-	"github.com/XiaoConstantine/dspy-go/pkg/core"
-	"github.com/XiaoConstantine/dspy-go/pkg/logging"
-	"github.com/XiaoConstantine/dspy-go/pkg/modules"
+	"github.com/scottdavis/dsgo/pkg/core"
+	"github.com/scottdavis/dsgo/pkg/logging"
+	"github.com/scottdavis/dsgo/pkg/modules"
 )
 
 type MIPRO struct {

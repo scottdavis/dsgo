@@ -6,8 +6,8 @@ import (
 	"math"
 	"time"
 
-	"github.com/XiaoConstantine/dspy-go/pkg/core"
-	"github.com/XiaoConstantine/dspy-go/pkg/errors"
+	"github.com/scottdavis/dsgo/pkg/core"
+	"github.com/scottdavis/dsgo/pkg/errors"
 )
 
 // Step represents a single unit of computation in a workflow. Each step wraps a DSPy

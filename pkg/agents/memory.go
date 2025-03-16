@@ -4,7 +4,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/XiaoConstantine/dspy-go/pkg/errors"
+	"github.com/scottdavis/dsgo/pkg/errors"
 )
 
 // Memory provides storage capabilities for agents.

@@ -8,8 +8,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/XiaoConstantine/dspy-go/pkg/errors"
-	"github.com/XiaoConstantine/dspy-go/pkg/logging"
+	"github.com/scottdavis/dsgo/pkg/errors"
+	"github.com/scottdavis/dsgo/pkg/logging"
 	_ "github.com/mattn/go-sqlite3"
 )
 

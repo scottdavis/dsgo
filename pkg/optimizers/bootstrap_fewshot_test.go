@@ -4,9 +4,9 @@ import (
 	"context"
 	"testing"
 
-	"github.com/XiaoConstantine/dspy-go/internal/testutil"
-	"github.com/XiaoConstantine/dspy-go/pkg/core"
-	"github.com/XiaoConstantine/dspy-go/pkg/modules"
+	"github.com/scottdavis/dsgo/internal/testutil"
+	"github.com/scottdavis/dsgo/pkg/core"
+	"github.com/scottdavis/dsgo/pkg/modules"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )

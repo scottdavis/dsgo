@@ -33,7 +33,7 @@ func EnsureDataset(datasetName string) (string, error) {
 	default:
 		suffix = ".parquet"
 	}
-	datasetDir := filepath.Join(homeDir, ".dspy-go", "datasets")
+	datasetDir := filepath.Join(homeDir, ".dsgo", "datasets")
 	if err := os.MkdirAll(datasetDir, 0755); err != nil {
 		return "", fmt.Errorf("failed to create dataset directory: %w", err)
 	}

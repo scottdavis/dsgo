@@ -1,6 +1,6 @@
 package workflows
 
-import "github.com/XiaoConstantine/dspy-go/pkg/errors"
+import "github.com/scottdavis/dsgo/pkg/errors"
 
 var (
 	// ErrStepConditionFailed indicates a step's condition check failed.

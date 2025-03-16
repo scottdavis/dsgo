@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/XiaoConstantine/dspy-go/pkg/agents"
+	"github.com/scottdavis/dsgo/pkg/agents"
 )
 
 // ParallelWorkflow executes multiple steps concurrently.

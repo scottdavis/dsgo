@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/XiaoConstantine/dspy-go/pkg/core"
+	"github.com/scottdavis/dsgo/pkg/core"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -76,7 +76,7 @@ func TestNewLLM(t *testing.T) {
 			apiKey:    "",
 			modelID:   "ollama:",
 			expectErr: true,
-			errMsg:    "invalid Ollama model ID format. Use 'ollama:<model_name>'",
+			errMsg:    "invalid Ollama model ID format. Use 'ollama:<model_name>' or 'ollama:<host>:<model_name>'",
 		},
 		{
 			name:      "Unsupported model",
@@ -122,21 +122,21 @@ func TestOllamaConfig(t *testing.T) {
 	// Test creating an LLM with OllamaConfig
 	customHost := "http://custom-ollama:11434"
 	modelName := "llama2"
-	
+
 	// Create a config with the custom host and model
 	ollamaConfig := NewOllamaConfig(customHost, modelName)
-	
+
 	// Create LLM using the config
 	llm, err := NewLLM("", ollamaConfig)
 	assert.NoError(t, err)
-	
+
 	// Check that the LLM has the correct model and endpoint
 	underlyingLLM := getUnderlyingLLM(llm)
 	ollamaLLM, ok := underlyingLLM.(*OllamaLLM)
 	assert.True(t, ok, "LLM should be an OllamaLLM")
-	assert.Equal(t, customHost, ollamaLLM.GetEndpointConfig().BaseURL, 
+	assert.Equal(t, customHost, ollamaLLM.GetEndpointConfig().BaseURL,
 		"OllamaLLM should use the specified host")
-	assert.Equal(t, modelName, ollamaLLM.ModelID(), 
+	assert.Equal(t, modelName, ollamaLLM.ModelID(),
 		"OllamaLLM should use the specified model name")
 }
 
@@ -146,25 +146,25 @@ func TestMultipleOllamaConfigs(t *testing.T) {
 	secondHost := "http://second-host:11434"
 	firstModel := "llama2"
 	secondModel := "llama3"
-	
+
 	// Create configs with different hosts and models
 	firstConfig := NewOllamaConfig(firstHost, firstModel)
 	secondConfig := NewOllamaConfig(secondHost, secondModel)
-	
+
 	// Create LLMs using the configs
 	firstLLM, err := NewLLM("", firstConfig)
 	assert.NoError(t, err)
-	
+
 	secondLLM, err := NewLLM("", secondConfig)
 	assert.NoError(t, err)
-	
+
 	// Verify each LLM has the correct host and model
 	firstUnderlyingLLM := getUnderlyingLLM(firstLLM)
 	firstOllamaLLM, ok := firstUnderlyingLLM.(*OllamaLLM)
 	assert.True(t, ok)
 	assert.Equal(t, firstHost, firstOllamaLLM.GetEndpointConfig().BaseURL)
 	assert.Equal(t, firstModel, firstOllamaLLM.ModelID())
-	
+
 	secondUnderlyingLLM := getUnderlyingLLM(secondLLM)
 	secondOllamaLLM, ok := secondUnderlyingLLM.(*OllamaLLM)
 	assert.True(t, ok)
@@ -177,21 +177,106 @@ func TestOllamaConfigWithTrailingSlash(t *testing.T) {
 	hostWithSlash := "http://custom-ollama:11434/"
 	hostWithoutSlash := "http://custom-ollama:11434"
 	modelName := "llama2"
-	
+
 	// Create config with trailing slash
 	config := NewOllamaConfig(hostWithSlash, modelName)
-	
+
 	// Verify trailing slash was removed
-	assert.Equal(t, hostWithoutSlash, config.Host, 
+	assert.Equal(t, hostWithoutSlash, config.Host,
 		"NewOllamaConfig should remove trailing slash from host")
-	
+
 	// Create LLM and verify correct host is used
 	llm, err := NewLLM("", config)
 	assert.NoError(t, err)
-	
+
 	underlyingLLM := getUnderlyingLLM(llm)
 	ollamaLLM, ok := underlyingLLM.(*OllamaLLM)
 	assert.True(t, ok)
 	assert.Equal(t, hostWithoutSlash, ollamaLLM.GetEndpointConfig().BaseURL,
 		"OllamaLLM should use host without trailing slash")
+}
+
+func TestOllamaModelIDWithCustomHost(t *testing.T) {
+	testCases := []struct {
+		name          string
+		modelID       core.ModelID
+		expectedHost  string
+		expectedModel string
+		expectErr     bool
+		errMsg        string
+	}{
+		{
+			name:          "Legacy format",
+			modelID:       "ollama:llama2",
+			expectedHost:  "http://localhost:11434",
+			expectedModel: "llama2",
+			expectErr:     false,
+		},
+		{
+			name:          "Custom host format with port",
+			modelID:       "ollama:custom-host:11434:llama2",
+			expectedHost:  "http://custom-host:11434",
+			expectedModel: "llama2",
+			expectErr:     false,
+		},
+		{
+			name:          "Simple host format",
+			modelID:       "ollama:localhost:llama2",
+			expectedHost:  "http://localhost",
+			expectedModel: "llama2",
+			expectErr:     false,
+		},
+		{
+			name:          "Custom host with HTTP prefix",
+			modelID:       "ollama:http://custom-host:11434:llama2",
+			expectedHost:  "http://custom-host:11434",
+			expectedModel: "llama2",
+			expectErr:     false,
+		},
+		{
+			name:          "Custom host with HTTPS prefix",
+			modelID:       "ollama:https://custom-host:11434:llama2",
+			expectedHost:  "https://custom-host:11434",
+			expectedModel: "llama2",
+			expectErr:     false,
+		},
+		{
+			name:      "Invalid format - empty model",
+			modelID:   "ollama:custom-host:",
+			expectErr: true,
+			errMsg:    "invalid Ollama model ID format. Use 'ollama:<host>:<model_name>' with non-empty host and model name",
+		},
+		{
+			name:      "Invalid format - empty host",
+			modelID:   "ollama::llama2",
+			expectErr: true,
+			errMsg:    "invalid Ollama model ID format. Use 'ollama:<host>:<model_name>' with non-empty host and model name",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			llm, err := NewLLM("", tc.modelID)
+
+			if tc.expectErr {
+				require.Error(t, err)
+				assert.Equal(t, tc.errMsg, err.Error())
+				assert.Nil(t, llm)
+				return
+			}
+
+			require.NoError(t, err)
+			require.NotNil(t, llm)
+
+			// Check that the LLM has the correct model and endpoint
+			underlyingLLM := getUnderlyingLLM(llm)
+			ollamaLLM, ok := underlyingLLM.(*OllamaLLM)
+			assert.True(t, ok, "LLM should be an OllamaLLM")
+
+			assert.Equal(t, tc.expectedHost, ollamaLLM.GetEndpointConfig().BaseURL,
+				"OllamaLLM should use the specified host")
+			assert.Equal(t, tc.expectedModel, ollamaLLM.ModelID(),
+				"OllamaLLM should use the specified model name")
+		})
+	}
 }

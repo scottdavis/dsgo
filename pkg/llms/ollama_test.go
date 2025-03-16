@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/XiaoConstantine/dspy-go/pkg/core"
+	"github.com/scottdavis/dsgo/pkg/core"
 	ollamaApi "github.com/ollama/ollama/api"
 	"github.com/stretchr/testify/assert"
 )
@@ -40,7 +40,7 @@ func TestNewOllamaLLM(t *testing.T) {
 
 func TestOllamaLLM_Generate(t *testing.T) {
 	testTime, _ := time.Parse(time.RFC3339, "2023-01-01T00:00:00Z")
-	
+
 	tests := []struct {
 		name           string
 		serverResponse *ollamaApi.GenerateResponse
@@ -138,10 +138,10 @@ func TestOllamaLLM_GenerateOptions(t *testing.T) {
 
 		// Send a response
 		resp := ollamaApi.GenerateResponse{
-			Model:     "test-model",
-			Response:  "Generated text with options",
+			Model:    "test-model",
+			Response: "Generated text with options",
 		}
-		
+
 		w.WriteHeader(http.StatusOK)
 		if err := json.NewEncoder(w).Encode(resp); err != nil {
 			return
@@ -152,8 +152,8 @@ func TestOllamaLLM_GenerateOptions(t *testing.T) {
 	llm, err := NewOllamaLLM(server.URL, "test-model")
 	assert.NoError(t, err)
 
-	response, err := llm.Generate(context.Background(), "Test prompt", 
-		core.WithMaxTokens(100), 
+	response, err := llm.Generate(context.Background(), "Test prompt",
+		core.WithMaxTokens(100),
 		core.WithTemperature(0.7))
 
 	assert.NoError(t, err)
@@ -170,8 +170,8 @@ func TestOllamaLLM_GenerateWithJSON(t *testing.T) {
 		{
 			name: "Valid JSON response",
 			serverResponse: ollamaApi.GenerateResponse{
-				Model:     "test-model",
-				Response:  `{"key": "value"}`,
+				Model:    "test-model",
+				Response: `{"key": "value"}`,
 			},
 			expectError:  false,
 			expectedJSON: map[string]any{"key": "value"},
@@ -179,8 +179,8 @@ func TestOllamaLLM_GenerateWithJSON(t *testing.T) {
 		{
 			name: "Invalid JSON response",
 			serverResponse: ollamaApi.GenerateResponse{
-				Model:     "test-model",
-				Response:  `invalid json`,
+				Model:    "test-model",
+				Response: `invalid json`,
 			},
 			expectError:  true,
 			expectedJSON: nil,
@@ -219,19 +219,18 @@ func TestOllamaLLM_CreateEmbedding(t *testing.T) {
 		assert.Equal(t, "POST", r.Method)
 		assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
 
-		var reqBody ollamaApi.EmbedRequest
+		var reqBody ollamaApi.EmbeddingRequest
 		err := json.NewDecoder(r.Body).Decode(&reqBody)
 		assert.NoError(t, err)
 
 		// Check that the request is properly formed
 		assert.Equal(t, "test-model", reqBody.Model)
-		assert.Equal(t, "Test input", reqBody.Input)
+		assert.Equal(t, "Test input", reqBody.Prompt) // Changed from Input to Prompt to match API
 		assert.NotNil(t, reqBody.Options)
 
 		// Send a direct JSON response with embedding data
-		mockResponse := map[string]any{
-			"embedding": []float32{0.1, 0.2, 0.3, 0.4, 0.5},
-			"size":      5,
+		mockResponse := ollamaApi.EmbeddingResponse{
+			Embedding: []float64{0.1, 0.2, 0.3, 0.4, 0.5},
 		}
 
 		w.WriteHeader(http.StatusOK)
@@ -274,8 +273,10 @@ func TestOllamaLLM_CreateEmbedding_Error(t *testing.T) {
 }
 
 func TestOllamaLLM_CreateEmbeddings(t *testing.T) {
+	// Create a mock server that handles individual embedding requests
+	callCount := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, "/api/embeddings/batch", r.URL.Path)
+		assert.Equal(t, "/api/embeddings", r.URL.Path)
 		assert.Equal(t, "POST", r.Method)
 		assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
 
@@ -287,19 +288,20 @@ func TestOllamaLLM_CreateEmbeddings(t *testing.T) {
 		assert.Equal(t, "test-model", reqBody.Model)
 		assert.NotNil(t, reqBody.Options)
 
-		// Create a direct JSON response with batch embedding data
-		mockResponse := map[string]any{
-			"embeddings": []map[string]any{
-				{
-					"embedding": []float32{0.1, 0.2, 0.3},
-					"size":      3,
-				},
-				{
-					"embedding": []float32{0.4, 0.5, 0.6},
-					"size":      3,
-				},
-			},
+		// Send a different embedding based on which request this is
+		var mockResponse ollamaApi.EmbeddingResponse
+		if callCount == 0 {
+			assert.Equal(t, "Input 1", reqBody.Prompt)
+			mockResponse = ollamaApi.EmbeddingResponse{
+				Embedding: []float64{0.1, 0.2, 0.3},
+			}
+		} else {
+			assert.Equal(t, "Input 2", reqBody.Prompt)
+			mockResponse = ollamaApi.EmbeddingResponse{
+				Embedding: []float64{0.4, 0.5, 0.6},
+			}
 		}
+		callCount++
 
 		w.WriteHeader(http.StatusOK)
 		if err := json.NewEncoder(w).Encode(mockResponse); err != nil {
@@ -322,6 +324,8 @@ func TestOllamaLLM_CreateEmbeddings(t *testing.T) {
 	assert.Equal(t, 3, result.Embeddings[0].Metadata["embedding_size"])
 	assert.Equal(t, "test-model", result.Embeddings[0].Metadata["model"])
 	assert.Equal(t, 0, result.Embeddings[0].TokenCount) // Ollama doesn't provide token count
+	assert.Equal(t, 0, result.Embeddings[0].Metadata["batch_index"])
+	assert.Equal(t, 1, result.Embeddings[1].Metadata["batch_index"])
 }
 
 func TestOllamaLLM_CreateEmbeddings_Error(t *testing.T) {

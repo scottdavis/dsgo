@@ -3,7 +3,7 @@ package main
 import (
 	"testing"
 
-	"github.com/XiaoConstantine/dspy-go/pkg/core"
+	"github.com/scottdavis/dsgo/pkg/core"
 )
 
 func TestCreateDataProcessingWorkflow(t *testing.T) {

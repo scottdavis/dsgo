@@ -3,7 +3,7 @@ package agents
 import (
 	"context"
 
-	"github.com/XiaoConstantine/dspy-go/pkg/core"
+	"github.com/scottdavis/dsgo/pkg/core"
 )
 
 type Agent interface {

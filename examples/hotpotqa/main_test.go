@@ -4,8 +4,8 @@ import (
 	"math"
 	"testing"
 
-	"github.com/XiaoConstantine/dspy-go/pkg/core"
-	"github.com/XiaoConstantine/dspy-go/pkg/llms"
+	"github.com/scottdavis/dsgo/pkg/core"
+	"github.com/scottdavis/dsgo/pkg/llms"
 )
 
 // floatEquals checks if two floats are equal within a small epsilon
