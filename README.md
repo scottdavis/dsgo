@@ -1,5 +1,7 @@
 # DSGo
 
+**This is mostly for my personal use, so support is not guaranteed.**
+
 A Go implementation of the Declarative Self-improving programming (DSPy) pattern.
 
 ## Acknowledgments
