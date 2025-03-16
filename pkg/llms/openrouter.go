@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strconv"
 	"time"
@@ -211,6 +212,14 @@ func (o *OpenRouterLLM) Generate(ctx context.Context, prompt string, options ...
 	}
 	defer resp.Body.Close()
 
+	// Print response headers for debugging
+	log.Printf("OpenRouter response headers for model %s:", o.ModelID())
+	for name, values := range resp.Header {
+		for _, value := range values {
+			log.Printf("  %s: %s", name, value)
+		}
+	}
+
 	// Read the response body
 	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -221,6 +230,13 @@ func (o *OpenRouterLLM) Generate(ctx context.Context, prompt string, options ...
 
 	// Create a new reader from the bytes for json.Decoder
 	bodyReader := bytes.NewReader(bodyBytes)
+
+	// Log the response body (limited to first 1000 chars to avoid overwhelming logs)
+	bodyPreview := string(bodyBytes)
+	if len(bodyPreview) > 1000 {
+		bodyPreview = bodyPreview[:1000] + "... [truncated]"
+	}
+	log.Printf("OpenRouter response body for model %s:\n%s", o.ModelID(), bodyPreview)
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, errors.WithFields(
@@ -265,6 +281,16 @@ func (o *OpenRouterLLM) Generate(ctx context.Context, prompt string, options ...
 		return nil, errors.WithFields(
 			errors.New(errors.Unknown, fmt.Sprintf("OpenRouter API returned error: %s", openRouterResp.Error.Message)),
 			errors.Fields{"model": o.ModelID(), "error_code": openRouterResp.Error.Code})
+	}
+
+	// Print metadata for debugging
+	if openRouterResp.Meta != nil && openRouterResp.Meta.RateLimit != nil {
+		log.Printf("OpenRouter metadata rate limits for model %s:", o.ModelID())
+		log.Printf("  Limit: %d", openRouterResp.Meta.RateLimit.Limit)
+		log.Printf("  Remaining: %d", openRouterResp.Meta.RateLimit.Remaining)
+		log.Printf("  Reset: %d", openRouterResp.Meta.RateLimit.Reset)
+	} else {
+		log.Printf("No rate limit metadata found in response for model %s", o.ModelID())
 	}
 
 	if len(openRouterResp.Choices) == 0 {
@@ -396,6 +422,14 @@ func (o *OpenRouterLLM) GenerateWithFunctions(ctx context.Context, prompt string
 	}
 	defer resp.Body.Close()
 
+	// Print response headers for debugging
+	log.Printf("OpenRouter response headers for model %s (with functions):", o.ModelID())
+	for name, values := range resp.Header {
+		for _, value := range values {
+			log.Printf("  %s: %s", name, value)
+		}
+	}
+
 	// Read the response body
 	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -406,6 +440,13 @@ func (o *OpenRouterLLM) GenerateWithFunctions(ctx context.Context, prompt string
 
 	// Create a new reader from the bytes for json.Decoder
 	bodyReader := bytes.NewReader(bodyBytes)
+
+	// Log the response body (limited to first 1000 chars to avoid overwhelming logs)
+	bodyPreview := string(bodyBytes)
+	if len(bodyPreview) > 1000 {
+		bodyPreview = bodyPreview[:1000] + "... [truncated]"
+	}
+	log.Printf("OpenRouter response body for model %s (with functions):\n%s", o.ModelID(), bodyPreview)
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, errors.WithFields(
@@ -457,6 +498,24 @@ func (o *OpenRouterLLM) GenerateWithFunctions(ctx context.Context, prompt string
 		return nil, errors.WithFields(
 			errors.New(errors.Unknown, fmt.Sprintf("OpenRouter API returned error: %s", errorMsg)),
 			errors.Fields{"model": o.ModelID()})
+	}
+
+	// Print metadata for debugging
+	if meta, hasMeta := result["meta"].(map[string]any); hasMeta {
+		if rateLimit, hasRateLimit := meta["rate_limit"].(map[string]any); hasRateLimit {
+			log.Printf("OpenRouter metadata rate limits for model %s (with functions):", o.ModelID())
+			if limit, ok := rateLimit["limit"].(float64); ok {
+				log.Printf("  Limit: %f", limit)
+			}
+			if remaining, ok := rateLimit["remaining"].(float64); ok {
+				log.Printf("  Remaining: %f", remaining)
+			}
+			if reset, ok := rateLimit["reset"].(float64); ok {
+				log.Printf("  Reset: %f", reset)
+			}
+		}
+	} else {
+		log.Printf("No rate limit metadata found in response for model %s (with functions)", o.ModelID())
 	}
 
 	if len(result["choices"].([]any)) == 0 {
