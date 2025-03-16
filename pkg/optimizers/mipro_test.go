@@ -11,30 +11,31 @@ import (
 	"github.com/stretchr/testify/mock"
 )
 
-// MockDataset is a mock implementation of the Dataset interface for testing
+// MockDataset is a mock implementation of the Dataset interface for testing.
 type MockDataset struct {
-	examples []core.Example
-	position int
+	Examples []core.Example
+	Index    int
+	mock.Mock
 }
 
 func NewMockDataset(examples []core.Example) *MockDataset {
 	return &MockDataset{
-		examples: examples,
-		position: 0,
+		Examples: examples,
+		Index:    0,
 	}
 }
 
 func (m *MockDataset) Next() (core.Example, bool) {
-	if m.position < len(m.examples) {
-		example := m.examples[m.position]
-		m.position++
+	if m.Index < len(m.Examples) {
+		example := m.Examples[m.Index]
+		m.Index++
 		return example, true
 	}
 	return core.Example{}, false
 }
 
 func (m *MockDataset) Reset() {
-	m.position = 0
+	m.Index = 0
 }
 
 func setupMockLLM() *testutil.MockLLM {

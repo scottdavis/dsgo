@@ -18,13 +18,13 @@ import (
 	"github.com/scottdavis/dsgo/pkg/utils"
 )
 
-// OpenRouterConfig represents configuration for an OpenRouter client
+// OpenRouterConfig represents configuration for an OpenRouter client.
 type OpenRouterConfig struct {
 	// ModelName is the name of the OpenRouter model (e.g., "anthropic/claude-3-opus-20240229")
 	ModelName string
 }
 
-// NewOpenRouterConfig creates a new OpenRouterConfig with the specified model name
+// NewOpenRouterConfig creates a new OpenRouterConfig with the specified model name.
 func NewOpenRouterConfig(modelName string) *OpenRouterConfig {
 	return &OpenRouterConfig{
 		ModelName: modelName,
@@ -37,7 +37,7 @@ type OpenRouterLLM struct {
 	apiKey string
 }
 
-// The base URL for the OpenRouter API
+// The base URL for the OpenRouter API.
 const openRouterBaseURL = "https://openrouter.ai/api/v1"
 
 // NewOpenRouterLLM creates a new OpenRouterLLM instance.
@@ -142,7 +142,7 @@ type openRouterErrorMeta struct {
 	Headers map[string]string `json:"headers,omitempty"`
 }
 
-// Helper function to convert millisecond timestamp to hours until reset
+// Helper function to convert millisecond timestamp to hours until reset.
 func formatResetTime(resetTimeMs string) string {
 	// Parse the reset time from string to int64
 	resetMs, err := strconv.ParseInt(resetTimeMs, 10, 64)
@@ -171,6 +171,7 @@ func formatResetTime(resetTimeMs string) string {
 }
 
 // Helper function to dump HTTP request for debugging
+// nolint: unused
 func dumpRequest(req *http.Request) {
 	// Comment out entire function content to disable dumping
 	/*
@@ -614,7 +615,7 @@ func (o *OpenRouterLLM) CreateEmbeddings(ctx context.Context, inputs []string, o
 	return nil, errors.New(errors.Unknown, "CreateEmbeddings not implemented for OpenRouter")
 }
 
-// StreamGenerate implements streaming generation for OpenRouter
+// StreamGenerate implements streaming generation for OpenRouter.
 func (o *OpenRouterLLM) StreamGenerate(ctx context.Context, prompt string, options ...core.GenerateOption) (*core.StreamResponse, error) {
 	// Apply options
 	opts := core.NewGenerateOptions()

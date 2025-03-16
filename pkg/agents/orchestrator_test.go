@@ -46,7 +46,7 @@ func (m *MockPlanCreator) CreatePlan(tasks []Task) ([][]Task, error) {
 	return nil, args.Error(1)
 }
 
-// MockMemory implements the Memory interface for testing
+// MockMemory implements the Memory interface for testing.
 type MockMemory struct {
 	mock.Mock
 }
@@ -71,7 +71,7 @@ func (m *MockMemory) Clear() error {
 	return args.Error(0)
 }
 
-// testTaskParser is a simple implementation of TaskParser for testing
+// testTaskParser is a simple implementation of TaskParser for testing.
 type testTaskParser struct{}
 
 func (p *testTaskParser) Parse(analyzerOutput map[string]any) ([]Task, error) {
@@ -98,7 +98,7 @@ func (p *testTaskParser) Parse(analyzerOutput map[string]any) ([]Task, error) {
 	return []Task{task}, nil
 }
 
-// testPlanCreator is a simple implementation of PlanCreator for testing
+// testPlanCreator is a simple implementation of PlanCreator for testing.
 type testPlanCreator struct{}
 
 func (p *testPlanCreator) CreatePlan(tasks []Task) ([][]Task, error) {
@@ -106,7 +106,7 @@ func (p *testPlanCreator) CreatePlan(tasks []Task) ([][]Task, error) {
 	return [][]Task{tasks}, nil
 }
 
-// testProcessor is a simple implementation of TaskProcessor for testing
+// testProcessor is a simple implementation of TaskProcessor for testing.
 type testProcessor struct{}
 
 func (p *testProcessor) Process(ctx context.Context, task Task, taskContext map[string]any) (any, error) {
@@ -114,7 +114,7 @@ func (p *testProcessor) Process(ctx context.Context, task Task, taskContext map[
 	return "processed", nil
 }
 
-// MockTaskAnalyzer is a mock implementation of an analyzer for testing
+// MockTaskAnalyzer is a mock implementation of an analyzer for testing.
 type MockTaskAnalyzer struct {
 	mock.Mock
 }

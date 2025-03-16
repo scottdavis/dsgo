@@ -14,8 +14,8 @@ import (
 )
 
 func RunGSM8KExample(apiKey string) {
-	// Setup LLM
-	utils.SetupLLM(apiKey, "llamacpp:local")
+	// Setup LLM and create config
+	dspyConfig := utils.SetupLLM(apiKey, "llamacpp:local")
 
 	// Load GSM8K dataset
 	examples, err := datasets.LoadGSM8K()
@@ -30,25 +30,33 @@ func RunGSM8KExample(apiKey string) {
 	)
 
 	// Create ChainOfThought module
-	cot := modules.NewChainOfThought(signature)
+	cot := modules.NewChainOfThought(signature, dspyConfig)
 
 	// Create program
-	program := core.NewProgram(map[string]core.Module{"cot": cot}, func(ctx context.Context, inputs map[string]interface{}) (map[string]interface{}, error) {
-		return cot.Process(ctx, inputs, core.WithGenerateOptions(
-			core.WithTemperature(0.7),
-			core.WithMaxTokens(8192),
-		))
-	})
+	program := core.NewProgram(
+		map[string]core.Module{"cot": cot},
+		func(ctx context.Context, inputs map[string]any) (map[string]any, error) {
+			return cot.Process(ctx, inputs, core.WithGenerateOptions(
+				core.WithTemperature(0.7),
+				core.WithMaxTokens(8192),
+			))
+		},
+		dspyConfig,
+	)
 
 	// Create optimizer
-	optimizer := optimizers.NewBootstrapFewShot(func(example, prediction map[string]interface{}, ctx context.Context) bool {
-		return example["answer"] == prediction["answer"]
-	}, 5)
+	optimizer := optimizers.NewBootstrapFewShot(
+		func(example, prediction map[string]any, ctx context.Context) bool {
+			return example["answer"] == prediction["answer"]
+		},
+		5,
+		dspyConfig,
+	)
 
 	// Prepare training set
-	trainset := make([]map[string]interface{}, len(examples[:10]))
+	trainset := make([]map[string]any, len(examples[:10]))
 	for i, ex := range examples[:10] {
-		trainset[i] = map[string]interface{}{
+		trainset[i] = map[string]any{
 			"question": ex.Question,
 			"answer":   ex.Answer,
 		}
@@ -62,7 +70,7 @@ func RunGSM8KExample(apiKey string) {
 
 	// Test the compiled program
 	for _, ex := range examples[10:15] {
-		result, err := compiledProgram.Execute(context.Background(), map[string]interface{}{"question": ex.Question})
+		result, err := compiledProgram.Execute(context.Background(), map[string]any{"question": ex.Question})
 		if err != nil {
 			log.Printf("Error executing program: %v", err)
 			continue

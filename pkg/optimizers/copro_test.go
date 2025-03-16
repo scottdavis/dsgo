@@ -27,7 +27,7 @@ func TestNewCopro(t *testing.T) {
 	assert.Equal(t, config, copro.Config)
 }
 
-// MockSubOptimizer for testing
+// MockSubOptimizer for testing.
 type MockSubOptimizer struct {
 	mock.Mock
 }

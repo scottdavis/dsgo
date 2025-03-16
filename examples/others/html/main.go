@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"strings"
 
 	"github.com/scottdavis/dsgo/pkg/core"
@@ -47,7 +48,7 @@ func cleanMarkdownCodeBlocks(input string) string {
 	return input
 }
 
-func getKeys(m map[string]interface{}) []string {
+func getKeys(m map[string]any) []string {
 	keys := make([]string, 0, len(m))
 	for k := range m {
 		keys = append(keys, k)
@@ -55,7 +56,7 @@ func getKeys(m map[string]interface{}) []string {
 	return keys
 }
 
-func createMetricFunc() func(example, prediction map[string]interface{}, ctx context.Context) bool {
+func createMetricFunc(dspyConfig *core.DSPYConfig) func(example, prediction map[string]any, ctx context.Context) bool {
 	// Create a signature for our judge module
 	signature := core.NewSignature(
 		[]core.InputField{
@@ -72,12 +73,12 @@ func createMetricFunc() func(example, prediction map[string]interface{}, ctx con
     Explain your reasoning step by step, and finally determine if the prediction is correct.`)
 
 	// Create a ChainOfThought module with this signature
-	judge := modules.NewChainOfThought(signature)
+	judge := modules.NewChainOfThought(signature, dspyConfig)
 
 	// Return a metric function that uses this module
-	return func(example, prediction map[string]interface{}, ctx context.Context) bool {
+	return func(example, prediction map[string]any, ctx context.Context) bool {
 		// Create inputs for the judge module
-		inputs := map[string]interface{}{
+		inputs := map[string]any{
 			"document":           example["document"],
 			"predicted_metadata": prediction,
 		}
@@ -106,6 +107,7 @@ func createMetricFunc() func(example, prediction map[string]interface{}, ctx con
 }
 
 func main() {
+	// Setup logging
 	output := logging.NewConsoleOutput(true, logging.WithColor(true))
 
 	logger := logging.NewLogger(logging.Config{
@@ -113,16 +115,24 @@ func main() {
 		Outputs:  []logging.Output{output},
 	})
 	logging.SetLogger(logger)
-	apiKey := flag.String("api-key", "", "Anthropic API Key")
+
+	// Parse CLI arguments
+	apiKey := flag.String("api-key", "", "API Key")
+	flag.Parse()
+
 	ctx := core.WithExecutionState(context.Background())
 
-	llms.EnsureFactory()
+	// Create a model config
+	config := llms.NewOpenRouterConfig("default_model")
 
-	// Configure the default LLM
-	err := core.ConfigureDefaultLLM(*apiKey, core.ModelGoogleGeminiFlash)
+	// Create LLM with API key and config
+	llm, err := llms.NewLLM(*apiKey, config)
 	if err != nil {
-		logger.Fatalf(ctx, "Failed to configure default LLM: %v", err)
+		logger.Fatalf(ctx, "Failed to create LLM: %v", err)
 	}
+
+	// Create DSPY config with LLM
+	dspyConfig := core.NewDSPYConfig().WithDefaultLLM(llm)
 
 	// Q1: Take a HTML page and generate structured data?
 	// Create a signature for extracting structured data from HTML
@@ -136,7 +146,7 @@ func main() {
 	)
 
 	// Create a ChainOfThought module for extraction
-	extract := modules.NewChainOfThought(extractSignature)
+	extract := modules.NewChainOfThought(extractSignature, dspyConfig)
 
 	// Q2: But I don't have HTML documents to use for optimization.
 	// Create a module to synthesize topics
@@ -146,7 +156,7 @@ func main() {
 	).WithInstruction(`Generate a list of diverse technical topics.
 Each topic should be something that could have a web page with headings and entities.
 Format your response as a list, DO NOT wrap response in json format`)
-	synthesize_topics := modules.NewPredict(synthesizeTopicsSignature)
+	synthesize_topics := modules.NewPredict(synthesizeTopicsSignature, dspyConfig)
 
 	// Create a module to synthesize HTML documents from topics
 	synthesizeDocSignature := core.NewSignature(
@@ -156,10 +166,10 @@ Format your response as a list, DO NOT wrap response in json format`)
 The HTML should include a title tag in the head, multiple heading tags (h1, h2, etc.),
 several paragraphs of content, and references to entity names (people, companies, technologies).
 Use proper HTML structure with html, head, and body tags.`)
-	synthesize_doc := modules.NewPredict(synthesizeDocSignature)
+	synthesize_doc := modules.NewPredict(synthesizeDocSignature, dspyConfig)
 
 	// Generate topics
-	topicsResult, err := synthesize_topics.Process(ctx, map[string]interface{}{
+	topicsResult, err := synthesize_topics.Process(ctx, map[string]any{
 		"count": 5,
 	})
 	if err != nil {
@@ -197,7 +207,7 @@ Use proper HTML structure with html, head, and body tags.`)
 	// Generate HTML documents for each topic
 	var trainingExamples []core.Example
 	for _, t := range topics {
-		docResult, err := synthesize_doc.Process(ctx, map[string]interface{}{
+		docResult, err := synthesize_doc.Process(ctx, map[string]any{
 			"topic": t,
 		})
 		if err != nil {
@@ -212,13 +222,12 @@ Use proper HTML structure with html, head, and body tags.`)
 				htmlString = cleanMarkdownCodeBlocks(htmlString)
 
 				// Create a training example with this document
-				example := core.Example{
-					Inputs: map[string]interface{}{
-						"document": htmlString,
-					},
-					// We're leaving Outputs empty since we want the model to generate them
-					Outputs: make(map[string]interface{}),
+				example := core.Example{}
+				example.Input = map[string]any{
+					"document": htmlString,
 				}
+				// We're leaving Output empty since we want the model to generate them
+				example.Output = make(map[string]any)
 
 				trainingExamples = append(trainingExamples, example)
 				logger.Info(ctx, "Created training example from %s document (%d chars)",
@@ -237,11 +246,11 @@ Use proper HTML structure with html, head, and body tags.`)
 
 	logger.Info(ctx, "Created %d training examples\n", len(trainingExamples))
 
-	metricFunc := createMetricFunc()
+	metricFunc := createMetricFunc(dspyConfig)
 
 	// Q3: How can I teach LLM to be better at this task?
 	// Define a metric function to evaluate extraction quality
-	metric := func(example, prediction map[string]interface{}, ctx context.Context) float64 {
+	coreMetric := func(example, prediction map[string]any, ctx context.Context) float64 {
 		if metricFunc(example, prediction, ctx) {
 			return 1.0
 		}
@@ -249,66 +258,72 @@ Use proper HTML structure with html, head, and body tags.`)
 		logger.Info(ctx, "======= METRIC FALLBACK EVALUATION STARTED =======")
 		_, ok := example["document"].(string)
 		if !ok {
-			logger.Error(ctx, "Document not found in example")
-			return 0.0
-		}
-		// Check if required fields exist
-		title, hasTitle := prediction["title"].(string)
-		headings, hasHeadings := prediction["headings"].(string)
-		entityInfo, hasEntityInfo := prediction["entity_info"].(string)
-
-		if !hasTitle || !hasHeadings || !hasEntityInfo {
-			logger.Warn(ctx, "Missing expected fields in prediction")
+			logger.Error(ctx, "Document is not a string")
 			return 0.0
 		}
 
-		// Simple presence checks
-		var score float64 = 0.0
+		// This is a simplified evaluation that assumes the prediction should
+		// at least have title, headings, and entity_info keys
+		requiredKeys := []string{"title", "headings", "entity_info"}
+		predictionKeys := getKeys(prediction)
 
-		// If we have a title that's not a placeholder
-		if hasTitle && !strings.Contains(strings.ToLower(title), "no title") {
-			score += 0.3
-			logger.Debug(ctx, "Added 0.3 for having title: %s", title)
+		score := 0.0
+		// Award points for having the right keys
+		for _, key := range requiredKeys {
+			for _, predKey := range predictionKeys {
+				if predKey == key && prediction[key] != nil {
+					score += 0.2
+					break
+				}
+			}
 		}
 
-		// If we have headings that aren't placeholders
-		if hasHeadings && !strings.Contains(strings.ToLower(headings), "no headings") {
-			score += 0.3
-			logger.Debug(ctx, "Added 0.3 for having headings: %s", headings)
+		// Award up to 0.4 points for non-empty values
+		for _, key := range predictionKeys {
+			val := prediction[key]
+			if val != nil {
+				strVal, ok := val.(string)
+				if ok && len(strVal) > 0 {
+					score += 0.1
+				}
+			}
 		}
 
-		// If we have entity info that's not a placeholder
-		if hasEntityInfo && !strings.Contains(strings.ToLower(entityInfo), "no entities") {
-			score += 0.4
-			logger.Debug(ctx, "Added 0.4 for having entity info: %s", entityInfo)
+		if score > 1.0 {
+			score = 1.0
 		}
-
-		logger.Debug(ctx, "Final metric score: %.2f", score)
-
+		logger.Info(ctx, "Fallback score: %.2f", score)
+		logger.Info(ctx, "======= METRIC FALLBACK EVALUATION ENDED =======")
 		return score
 	}
 
-	dataset := NewSimpleDataset(trainingExamples)
-
-	// Create a program using the extract module
+	// Create a program
 	program := core.NewProgram(
 		map[string]core.Module{"extract": extract},
-		func(ctx context.Context, inputs map[string]interface{}) (map[string]interface{}, error) {
+		func(ctx context.Context, inputs map[string]any) (map[string]any, error) {
 			return extract.Process(ctx, inputs)
 		},
+		dspyConfig,
 	)
 
+	// Create dataset
+	dataset := NewSimpleDataset(trainingExamples)
+
+	// Create a wrapper function that matches the core.Metric signature
+	wrappedMetric := func(ctx context.Context, result map[string]any) (bool, string) {
+		score := coreMetric(map[string]any{}, result, ctx)
+		return score > 0.5, fmt.Sprintf("Score: %.2f", score)
+	}
+
 	// Optimize the extraction module using MIPROv2
-	optimizer := optimizers.NewMIPRO(metric,
+	optimizer := optimizers.NewMIPRO(
+		coreMetric,
 		optimizers.WithNumTrials(10),
 		optimizers.WithMaxBootstrappedDemos(5),
 		optimizers.WithVerbose(true),
 	)
-	coreMetric := func(expected, actual map[string]interface{}) float64 {
-		return metric(expected, actual, ctx)
-	}
 
-	optimized_program, err := optimizer.Compile(ctx, program, dataset, coreMetric)
+	optimized_program, err := optimizer.Compile(ctx, program, dataset, wrappedMetric)
 	if err != nil {
 		logger.Fatalf(ctx, "Optimization failed: %v", err)
 	}

@@ -8,16 +8,18 @@ import (
 	"github.com/scottdavis/dsgo/pkg/core"
 )
 
-// OllamaConfig represents configuration for an Ollama model
+// OllamaConfig represents configuration for an Ollama model.
 type OllamaConfig struct {
 	// Host is the Ollama server endpoint (e.g., "http://localhost:11434")
 	Host string
 
 	// ModelName is the name of the Ollama model (e.g., "llama2", "llama3")
 	ModelName string
+
+	Options map[string]any
 }
 
-// NewOllamaConfig creates a new OllamaConfig with the specified host and model name
+// NewOllamaConfig creates a new OllamaConfig with the specified host and model name.
 func NewOllamaConfig(host, modelName string) *OllamaConfig {
 	// Ensure host doesn't have trailing slash
 	host = strings.TrimSuffix(host, "/")
@@ -25,10 +27,11 @@ func NewOllamaConfig(host, modelName string) *OllamaConfig {
 	return &OllamaConfig{
 		Host:      host,
 		ModelName: modelName,
+		Options:   make(map[string]any),
 	}
 }
 
-// DefaultLLMFactory implements the LLMFactory interface
+// DefaultLLMFactory implements the LLMFactory interface.
 type DefaultLLMFactory struct{}
 
 // LLMFactory defines a simple interface for creating LLM instances.
