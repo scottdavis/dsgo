@@ -12,7 +12,7 @@ import (
 func TestEnsureDataset(t *testing.T) {
 	// Setup
 	homeDir, _ := os.UserHomeDir()
-	datasetDir := filepath.Join(homeDir, ".dspy-go", "datasets")
+	datasetDir := filepath.Join(homeDir, ".dsgo", "datasets")
 
 	tests := []struct {
 		name           string

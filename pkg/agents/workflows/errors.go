@@ -1,6 +1,6 @@
 package workflows
 
-import "github.com/XiaoConstantine/dspy-go/pkg/errors"
+import "github.com/scottdavis/dsgo/pkg/errors"
 
 var (
 	// ErrStepConditionFailed indicates a step's condition check failed.
@@ -19,7 +19,7 @@ var (
 	ErrCyclicDependency = errors.New(errors.WorkflowExecutionFailed, "cyclic dependency detected in workflow")
 )
 
-func WrapWorkflowError(err error, fields map[string]interface{}) error {
+func WrapWorkflowError(err error, fields map[string]any) error {
 	if err == nil {
 		return nil
 	}

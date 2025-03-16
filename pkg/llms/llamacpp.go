@@ -10,9 +10,9 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/XiaoConstantine/dspy-go/pkg/core"
-	"github.com/XiaoConstantine/dspy-go/pkg/errors"
-	"github.com/XiaoConstantine/dspy-go/pkg/utils"
+	"github.com/scottdavis/dsgo/pkg/core"
+	"github.com/scottdavis/dsgo/pkg/errors"
+	"github.com/scottdavis/dsgo/pkg/utils"
 )
 
 // LlamacppLLM implements the core.LLM interface for Llamacpp-hosted models.
@@ -87,7 +87,7 @@ type llamacppEmbeddingRequest struct {
 	Model     string `json:"model,omitempty"`
 	Normalize bool   `json:"normalize,omitempty"` // Whether to L2-normalize embeddings
 	// Additional parameters from options
-	Parameters map[string]interface{} `json:"parameters,omitempty"`
+	Parameters map[string]any `json:"parameters,omitempty"`
 }
 
 type llamacppBatchEmbeddingRequest struct {
@@ -95,7 +95,7 @@ type llamacppBatchEmbeddingRequest struct {
 	Inputs     []string               `json:"inputs"`
 	Model      string                 `json:"model,omitempty"`
 	Normalize  bool                   `json:"normalize,omitempty"`
-	Parameters map[string]interface{} `json:"parameters,omitempty"`
+	Parameters map[string]any `json:"parameters,omitempty"`
 }
 
 func (o *LlamacppLLM) Generate(ctx context.Context, prompt string, options ...core.GenerateOption) (*core.LLMResponse, error) {
@@ -183,7 +183,7 @@ func (o *LlamacppLLM) Generate(ctx context.Context, prompt string, options ...co
 }
 
 // GenerateWithJSON implements the core.LLM interface.
-func (o *LlamacppLLM) GenerateWithJSON(ctx context.Context, prompt string, options ...core.GenerateOption) (map[string]interface{}, error) {
+func (o *LlamacppLLM) GenerateWithJSON(ctx context.Context, prompt string, options ...core.GenerateOption) (map[string]any, error) {
 	response, err := o.Generate(ctx, prompt, options...)
 	if err != nil {
 		return nil, err
@@ -192,7 +192,7 @@ func (o *LlamacppLLM) GenerateWithJSON(ctx context.Context, prompt string, optio
 	return utils.ParseJSONResponse(response.Content)
 }
 
-func (o *LlamacppLLM) GenerateWithFunctions(ctx context.Context, prompt string, functions []map[string]interface{}, options ...core.GenerateOption) (map[string]interface{}, error) {
+func (o *LlamacppLLM) GenerateWithFunctions(ctx context.Context, prompt string, functions []map[string]any, options ...core.GenerateOption) (map[string]any, error) {
 	panic("Not implemented")
 }
 
@@ -377,7 +377,7 @@ func (o *LlamacppLLM) CreateEmbeddings(ctx context.Context, inputs []string, opt
 			// Create the embedding result with metadata
 			result := core.EmbeddingResult{
 				Vector: item.Embedding[0],
-				Metadata: map[string]interface{}{
+				Metadata: map[string]any{
 					"index":        item.Index,
 					"batch_offset": i,
 					"model":        opts.Model,

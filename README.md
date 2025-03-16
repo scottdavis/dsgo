@@ -1,21 +1,35 @@
-dspy-go
--------
-[![Go Report Card](https://goreportcard.com/badge/github.com/XiaoConstantine/dspy-go)](https://goreportcard.com/report/github.com/XiaoConstantine/dspy-go)
-[![codecov](https://codecov.io/gh/XiaoConstantine/dspy-go/graph/badge.svg?token=GGKRLMLXJ9)](https://codecov.io/gh/XiaoConstantine/dspy-go)
-[![Go Reference](https://pkg.go.dev/badge/github.com/XiaoConstantine/dspy-go)](https://pkg.go.dev/github.com/XiaoConstantine/dspy-go)
+# DSGo
+
+A Go implementation of the Declarative Self-improving programming (DSPy) pattern.
+
+## Acknowledgments
+
+I would like to express my sincere gratitude to Xiao Constantine ([@XiaoConstantine](https://github.com/XiaoConstantine)), the original author of dspy-go. This project builds upon his excellent foundation and pioneering work in bringing the DSPy pattern to the Go ecosystem.
+
+### Recent Improvements
+
+This fork includes several enhancements to the original project:
+
+- **Advanced LLM Configuration**: Added more flexible ways to configure Ollama with custom hosts via multiple format options
+- **Ability to inject llm instances**: into functions so you cna use different llms for different parts/steps of your program
+- **OpenRouter Integration**: Full support for [OpenRouter](https://openrouter.ai) as an LLM provider, enabling access to hundreds of AI models through a single interface
+
+[![Go Report Card](https://goreportcard.com/badge/github.com/scottdavis/dsgo)](https://goreportcard.com/report/github.com/scottdavis/dsgo)
+[![codecov](https://codecov.io/gh/scottdavis/dsgo/graph/badge.svg)](https://codecov.io/gh/scottdavis/dsgo)
+[![Go Reference](https://pkg.go.dev/badge/github.com/scottdavis/dsgo)](https://pkg.go.dev/github.com/scottdavis/dsgo)
 
 
-DSPy-Go is a Go implementation of DSPy, bringing systematic prompt engineering and automated reasoning capabilities to Go applications. It provides a flexible framework for building reliable and effective Language Model (LLM) applications through composable modules and workflows.
+DSGo is a Go implementation of DSPy, bringing systematic prompt engineering and automated reasoning capabilities to Go applications. It provides a flexible framework for building reliable and effective Language Model (LLM) applications through composable modules and workflows.
 
 
 ### Installation
 ```go
-go get github.com/XiaoConstantine/dspy-go
+go get github.com/scottdavis/dsgo
 ```
 
 ### Quick Start
 
-Here's a simple example to get you started with DSPy-Go:
+Here's a simple example to get you started with DSGo:
 
 ```go
 import (
@@ -23,10 +37,10 @@ import (
     "fmt"
     "log"
 
-    "github.com/XiaoConstantine/dspy-go/pkg/core"
-    "github.com/XiaoConstantine/dspy-go/pkg/llms"
-    "github.com/XiaoConstantine/dspy-go/pkg/modules"
-    "github.com/XiaoConstantine/dspy-go/pkg/config"
+    "github.com/scottdavis/dsgo/pkg/core"
+    "github.com/scottdavis/dsgo/pkg/llms"
+    "github.com/scottdavis/dsgo/pkg/modules"
+    "github.com/scottdavis/dsgo/pkg/config"
 )
 
 func main() {
@@ -72,7 +86,7 @@ func main() {
 Signatures define the input and output fields for modules. They help in creating type-safe and well-defined interfaces for your AI components.
 
 #### Modules
-Modules are the building blocks of DSPy-Go programs. They encapsulate specific functionalities and can be composed to create complex pipelines. Some key modules include:
+Modules are the building blocks of DSGo programs. They encapsulate specific functionalities and can be composed to create complex pipelines. Some key modules include:
 
 * Predict: Basic prediction module
 * ChainOfThought: Implements chain-of-thought reasoning
@@ -80,7 +94,7 @@ Modules are the building blocks of DSPy-Go programs. They encapsulate specific f
 
 
 #### Optimizers
-Optimizers help improve the performance of your DSPy-Go programs by automatically tuning prompts and module parameters. Including:
+Optimizers help improve the performance of your DSGo programs by automatically tuning prompts and module parameters. Including:
 * BootstrapFewShot: Automatic few-shot example selection
 * MIPRO: Multi-step interactive prompt optimization
 * Copro: Collaborative prompt optimization
@@ -164,8 +178,21 @@ func (t *CustomTool) Execute(ctx context.Context, action string) (string, error)
 // Using Anthropic Claude
 llm, _ := llms.NewAnthropicLLM("api-key", anthropic.ModelSonnet)
 
-// Using Ollama
-llm, _ := llms.NewOllamaLLM("http://localhost:11434", "ollama:llama2")
+// Using Ollama (various options)
+// Option 1: Direct constructor
+llm, _ := llms.NewOllamaLLM("http://localhost:11434", "llama2")
+
+// Option 2: Using NewLLM with config
+ollamaConfig := llms.NewOllamaConfig("http://ollama.myhost:11434", "llama2")
+llm, _ := llms.NewLLM("", ollamaConfig)
+
+// Option 3: Using string format (legacy)
+llm, _ := llms.NewLLM("", "ollama:llama2")
+
+// Option 4: Using string format with custom host
+llm, _ := llms.NewLLM("", "ollama:example.com:11434:llama2")
+// or with protocol
+llm, _ := llms.NewLLM("", "ollama:http://example.com:11434:llama2")
 
 // Using LlamaCPP
 llm, _ := llms.NewLlamacppLLM("http://localhost:8080")
@@ -181,4 +208,4 @@ Check the examples directory for complete implementations:
 
 
 ### License
-DSPy-Go is released under the MIT License. See the LICENSE file for details.
+DSGo is released under the MIT License. See the LICENSE file for details.

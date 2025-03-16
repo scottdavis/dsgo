@@ -9,31 +9,31 @@ func TestParseJSONResponse(t *testing.T) {
 	tests := []struct {
 		name     string
 		input    string
-		expected map[string]interface{}
+		expected map[string]any
 		wantErr  bool
 	}{
 		{
 			name:     "Valid JSON object",
 			input:    `{"key": "value", "number": 42}`,
-			expected: map[string]interface{}{"key": "value", "number": float64(42)},
+			expected: map[string]any{"key": "value", "number": float64(42)},
 			wantErr:  false,
 		},
 		{
 			name:     "Empty JSON object",
 			input:    `{}`,
-			expected: map[string]interface{}{},
+			expected: map[string]any{},
 			wantErr:  false,
 		},
 		{
 			name:     "JSON with nested object",
 			input:    `{"outer": {"inner": "value"}}`,
-			expected: map[string]interface{}{"outer": map[string]interface{}{"inner": "value"}},
+			expected: map[string]any{"outer": map[string]any{"inner": "value"}},
 			wantErr:  false,
 		},
 		{
 			name:     "JSON with array",
 			input:    `{"array": [1, 2, 3]}`,
-			expected: map[string]interface{}{"array": []interface{}{float64(1), float64(2), float64(3)}},
+			expected: map[string]any{"array": []any{float64(1), float64(2), float64(3)}},
 			wantErr:  false,
 		},
 		{

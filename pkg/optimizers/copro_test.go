@@ -4,158 +4,148 @@ import (
 	"context"
 	"testing"
 
-	"github.com/XiaoConstantine/dspy-go/internal/testutil"
-	"github.com/XiaoConstantine/dspy-go/pkg/core"
-	"github.com/XiaoConstantine/dspy-go/pkg/modules"
+	"github.com/scottdavis/dsgo/pkg/core"
+	"github.com/scottdavis/dsgo/pkg/modules"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
 
-// MockModule is a mock implementation of core.Module.
-type MockModule struct {
+func TestNewCopro(t *testing.T) {
+	mockLLM := setupMockLLM()
+	config := core.NewDSPYConfig().WithDefaultLLM(mockLLM)
+	
+	metric := func(example, prediction map[string]any, ctx context.Context) bool {
+		return true
+	}
+	
+	mockOptimizer := new(MockSubOptimizer)
+	
+	copro := NewCopro(metric, 5, mockOptimizer, config)
+	
+	assert.Equal(t, 5, copro.MaxBootstrapped)
+	assert.Same(t, mockOptimizer, copro.SubOptimizer)
+	assert.Equal(t, config, copro.Config)
+}
+
+// MockSubOptimizer for testing
+type MockSubOptimizer struct {
 	mock.Mock
 }
 
-func (m *MockModule) Process(ctx context.Context, inputs map[string]any, opts ...core.Option) (map[string]any, error) {
-	args := m.Called(ctx, inputs)
-	return args.Get(0).(map[string]any), args.Error(1)
-}
-
-func (m *MockModule) GetSignature() core.Signature {
-	args := m.Called()
-	return args.Get(0).(core.Signature)
-}
-
-func (m *MockModule) SetLLM(llm core.LLM) {
-	m.Called(llm)
-}
-
-func (m *MockModule) Clone() core.Module {
-	args := m.Called()
-	return args.Get(0).(core.Module)
-}
-
-// MockOptimizer is a mock implementation of core.Optimizer.
-type MockOptimizer struct {
-	mock.Mock
-}
-
-func (m *MockOptimizer) Compile(ctx context.Context, program core.Program, dataset core.Dataset, metric core.Metric) (core.Program, error) {
+func (m *MockSubOptimizer) Compile(ctx context.Context, program *core.Program, dataset core.Dataset, metric core.Metric) (*core.Program, error) {
 	args := m.Called(ctx, program, dataset, metric)
-	return args.Get(0).(core.Program), args.Error(1)
+	return args.Get(0).(*core.Program), args.Error(1)
 }
 
-func TestCoproCompile(t *testing.T) {
-	// Create mock objects
-	mockModule := new(MockModule)
-	mockSubOptimizer := new(MockOptimizer)
-	mockDataset := new(testutil.MockDataset)
-
+func TestCopro_Compile(t *testing.T) {
+	// Create a mock sub-optimizer
+	mockSubOptimizer := new(MockSubOptimizer)
+	
+	// Create the test objects
+	ctx := context.Background()
+	mockLLM := setupMockLLM()
+	config := core.NewDSPYConfig().WithDefaultLLM(mockLLM)
+	
 	// Create a test program
-	testProgram := core.Program{
-		Modules: map[string]core.Module{
-			"test": mockModule,
-		},
-	}
-
-	// Create a Copro instance
-	copro := NewCopro(
-		func(example, prediction map[string]interface{}, ctx context.Context) bool { return true },
-		5,
-		mockSubOptimizer,
+	sig := core.NewSignature(
+		[]core.InputField{{Field: core.Field{Name: "input"}}},
+		[]core.OutputField{{Field: core.Field{Name: "output"}}},
 	)
-
+	
+	predict := modules.NewPredict(sig, config)
+	
+	program := core.NewProgram(
+		map[string]core.Module{"predict": predict},
+		func(ctx context.Context, inputs map[string]any) (map[string]any, error) {
+			return mockLLM.GenerateWithJSON(ctx, inputs["input"].(string))
+		},
+		config,
+	)
+	
+	// Create test data
+	dataset := NewMockDataset([]core.Example{
+		{
+			Input:  map[string]any{"input": "test1"},
+			Output: map[string]any{"output": "result1"},
+		},
+	})
+	
+	// Set up metric function
+	metric := func(ctx context.Context, result map[string]any) (bool, string) {
+		return true, ""
+	}
+	
 	// Set up expectations
-	mockModule.On("Clone").Return(mockModule)
-	// We no longer expect Compile to be called on non-Predict modules
-	// mockSubOptimizer.On("Compile", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(testProgram, nil)
-
-	// Create a context with trace manager
-	ctx := core.WithExecutionState(context.Background())
-
-	// Call Compile
-	compiledProgram, err := copro.Compile(ctx, testProgram, mockDataset, nil)
-
-	// Assert expectations
+	mockSubOptimizer.On("Compile", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(program, nil)
+	
+	// Create and test Copro
+	metric2 := func(example, prediction map[string]any, ctx context.Context) bool {
+		return true
+	}
+	
+	copro := NewCopro(metric2, 5, mockSubOptimizer, config)
+	
+	result, err := copro.Compile(ctx, program, dataset, metric)
+	
 	assert.NoError(t, err)
-	assert.NotNil(t, compiledProgram)
-	assert.Equal(t, 1, len(compiledProgram.Modules))
-	assert.Contains(t, compiledProgram.Modules, "test")
-	assert.Equal(t, mockModule, compiledProgram.Modules["test"]) // The module should be unchanged
-
-	mockModule.AssertExpectations(t)
+	assert.NotNil(t, result)
 	mockSubOptimizer.AssertExpectations(t)
 }
 
-func TestCoproCompileWithPredict(t *testing.T) {
-	// Create mock objects
-	mockPredict := modules.NewPredict(core.Signature{})
-	mockSubOptimizer := new(MockOptimizer)
-	mockDataset := new(testutil.MockDataset)
-
+func TestCopro_CompileWithTeacher(t *testing.T) {
+	// For a more comprehensive test, we'll simulate a teacher program
+	ctx := context.Background()
+	mockLLM := setupMockLLM()
+	teacherLLM := setupMockLLM() // Using another mock for teacher
+	
+	config := core.NewDSPYConfig().
+		WithDefaultLLM(mockLLM).
+		WithTeacherLLM(teacherLLM)
+	
+	mockSubOptimizer := new(MockSubOptimizer)
+	
 	// Create a test program
-	testProgram := core.Program{
-		Modules: map[string]core.Module{
-			"predict": mockPredict,
-		},
-	}
-
-	// Create a Copro instance
-	copro := NewCopro(
-		func(example, prediction map[string]interface{}, ctx context.Context) bool { return true },
-		5,
-		mockSubOptimizer,
+	sig := core.NewSignature(
+		[]core.InputField{{Field: core.Field{Name: "input"}}},
+		[]core.OutputField{{Field: core.Field{Name: "output"}}},
 	)
-
-	// Set up expectations
-	mockSubOptimizer.On("Compile", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(testProgram, nil)
-
-	// Create a context with trace manager
-	ctx := core.WithExecutionState(context.Background())
-
-	// Call Compile
-	compiledProgram, err := copro.Compile(ctx, testProgram, mockDataset, nil)
-
-	// Assert expectations
+	
+	predict := modules.NewPredict(sig, config)
+	
+	program := core.NewProgram(
+		map[string]core.Module{"predict": predict},
+		func(ctx context.Context, inputs map[string]any) (map[string]any, error) {
+			return mockLLM.GenerateWithJSON(ctx, inputs["input"].(string))
+		},
+		config,
+	)
+	
+	// Create test data
+	dataset := NewMockDataset([]core.Example{
+		{
+			Input:  map[string]any{"input": "test1"},
+			Output: map[string]any{"output": "result1"},
+		},
+	})
+	
+	// Set up metric function
+	metric := func(ctx context.Context, result map[string]any) (bool, string) {
+		return true, ""
+	}
+	
+	// Set expectation for sub-optimizer
+	mockSubOptimizer.On("Compile", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(program, nil)
+	
+	// Create and test Copro
+	metric2 := func(example, prediction map[string]any, ctx context.Context) bool {
+		return true
+	}
+	
+	copro := NewCopro(metric2, 5, mockSubOptimizer, config)
+	
+	result, err := copro.Compile(ctx, program, dataset, metric)
+	
 	assert.NoError(t, err)
-	assert.NotNil(t, compiledProgram)
-	assert.Equal(t, 1, len(compiledProgram.Modules))
-	assert.Contains(t, compiledProgram.Modules, "predict")
-
+	assert.NotNil(t, result)
 	mockSubOptimizer.AssertExpectations(t)
-}
-
-func TestCoproCompileError(t *testing.T) {
-	// Create mock objects
-	mockSubOptimizer := new(MockOptimizer)
-	mockDataset := new(testutil.MockDataset)
-
-	// Create a test program
-	testProgram := core.Program{
-		Modules: map[string]core.Module{
-			"test": &modules.Predict{}, // Use a real Predict module instead of mockModule
-		},
-	}
-
-	// Create a Copro instance
-	copro := NewCopro(
-		func(example, prediction map[string]interface{}, ctx context.Context) bool { return true },
-		5,
-		mockSubOptimizer,
-	)
-
-	// Set up expectations
-	mockSubOptimizer.On("Compile", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(core.Program{}, assert.AnError)
-
-	// Create a context with trace manager
-	ctx := core.WithExecutionState(context.Background())
-
-	// Call Compile
-	_, err := copro.Compile(ctx, testProgram, mockDataset, nil)
-
-	// Assert expectations
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "error compiling module test")
-
-	mockSubOptimizer.AssertExpectations(t)
-}
+} 

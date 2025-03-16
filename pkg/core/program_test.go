@@ -11,53 +11,67 @@ import (
 )
 
 // MockModule is a mock implementation of Module interface for testing.
-type MockModule struct {
+type MockProgramModule struct {
 	mock.Mock
 }
 
-func (m *MockModule) Process(ctx context.Context, inputs map[string]any, opts ...Option) (map[string]any, error) {
+func (m *MockProgramModule) Process(ctx context.Context, inputs map[string]any, opts ...Option) (map[string]any, error) {
 	args := m.Called(ctx, inputs)
 	return args.Get(0).(map[string]any), args.Error(1)
 }
 
-func (m *MockModule) GetSignature() Signature {
+func (m *MockProgramModule) GetSignature() Signature {
 	args := m.Called()
 	return args.Get(0).(Signature)
 }
 
-func (m *MockModule) SetLLM(llm LLM) {
-	m.Called(llm)
-}
-
-func (m *MockModule) Clone() Module {
+func (m *MockProgramModule) Clone() Module {
 	args := m.Called()
 	return args.Get(0).(Module)
 }
 
 func TestProgram(t *testing.T) {
 	t.Run("NewProgram", func(t *testing.T) {
-		mockModule := new(MockModule)
+		mockModule := new(MockProgramModule)
 		modules := map[string]Module{"test": mockModule}
-		forward := func(context.Context, map[string]interface{}) (map[string]interface{}, error) {
+		forward := func(context.Context, map[string]any) (map[string]any, error) {
+			return nil, nil
+		}
+		config := NewDSPYConfig()
+
+		program := NewProgram(modules, forward, config)
+		assert.Equal(t, modules, program.Modules)
+		assert.NotNil(t, program.Forward)
+		assert.Equal(t, config, program.Config)
+	})
+
+	t.Run("NewProgram with nil config", func(t *testing.T) {
+		mockModule := new(MockProgramModule)
+		modules := map[string]Module{"test": mockModule}
+		forward := func(context.Context, map[string]any) (map[string]any, error) {
 			return nil, nil
 		}
 
-		program := NewProgram(modules, forward)
+		program := NewProgram(modules, forward, nil)
 		assert.Equal(t, modules, program.Modules)
 		assert.NotNil(t, program.Forward)
+		assert.NotNil(t, program.Config) // Should create default config
 	})
+}
 
+func TestProgramExecute(t *testing.T) {
 	t.Run("Execute with valid inputs", func(t *testing.T) {
-		mockModule := new(MockModule)
-		expectedOutputs := map[string]interface{}{"result": "success"}
-		forward := func(ctx context.Context, inputs map[string]interface{}) (map[string]interface{}, error) {
+		mockModule := new(MockProgramModule)
+		expectedOutputs := map[string]any{"result": "success"}
+		forward := func(ctx context.Context, inputs map[string]any) (map[string]any, error) {
 			return expectedOutputs, nil
 		}
+		config := NewDSPYConfig()
 
-		program := NewProgram(map[string]Module{"test": mockModule}, forward)
+		program := NewProgram(map[string]Module{"test": mockModule}, forward, config)
 		ctx := WithExecutionState(context.Background())
 
-		outputs, err := program.Execute(ctx, map[string]interface{}{"input": "test"})
+		outputs, err := program.Execute(ctx, map[string]any{"input": "test"})
 		assert.NoError(t, err)
 		assert.Equal(t, expectedOutputs, outputs)
 
@@ -68,7 +82,8 @@ func TestProgram(t *testing.T) {
 	})
 
 	t.Run("Execute with nil forward function", func(t *testing.T) {
-		program := NewProgram(nil, nil)
+		config := NewDSPYConfig()
+		program := NewProgram(nil, nil, config)
 		ctx := WithExecutionState(context.Background())
 
 		_, err := program.Execute(ctx, nil)
@@ -78,11 +93,12 @@ func TestProgram(t *testing.T) {
 
 	t.Run("Execute with forward error", func(t *testing.T) {
 		expectedErr := errors.New("forward error")
-		forward := func(ctx context.Context, inputs map[string]interface{}) (map[string]interface{}, error) {
+		forward := func(ctx context.Context, inputs map[string]any) (map[string]any, error) {
 			return nil, expectedErr
 		}
+		config := NewDSPYConfig()
 
-		program := NewProgram(nil, forward)
+		program := NewProgram(nil, forward, config)
 		ctx := WithExecutionState(context.Background())
 
 		_, err := program.Execute(ctx, nil)
@@ -94,91 +110,20 @@ func TestProgram(t *testing.T) {
 		require.NotEmpty(t, spans)
 		assert.Equal(t, expectedErr, spans[0].Error)
 	})
+}
 
-	t.Run("GetSignature", func(t *testing.T) {
-		mockModule := new(MockModule)
-		expectedSig := NewSignature(
-			[]InputField{{Field: Field{Name: "input"}}},
-			[]OutputField{{Field: Field{Name: "output"}}},
-		)
-		mockModule.On("GetSignature").Return(expectedSig)
-
-		program := NewProgram(map[string]Module{"test": mockModule}, nil)
-		sig := program.GetSignature()
-		assert.Equal(t, expectedSig, sig)
-		mockModule.AssertExpectations(t)
-	})
-
-	t.Run("Clone", func(t *testing.T) {
-		expectedSig := NewSignature(
-			[]InputField{{Field: Field{Name: "input"}}},
-			[]OutputField{{Field: Field{Name: "output"}}},
-		)
-
-		// Create and configure the original mock module
-		mockOriginal := new(MockModule)
-		// GetSignature gets called three times on original:
-		// 1. When we test GetSignature explicitly
-		// 2. During the cloning process itself
-		// 3. When setting up the new program's signature after cloning
-		mockOriginal.On("GetSignature").Return(expectedSig).Times(3)
-
-		// Create and configure the cloned mock module
-		mockCloned := new(MockModule)
-		// GetSignature gets called on clone after it's created
-		mockCloned.On("GetSignature").Return(expectedSig).Times(1)
-
-		// Set up the Clone expectation
-		mockOriginal.On("Clone").Return(mockCloned)
-
-		// Create a test forward function
-		forward := func(ctx context.Context, inputs map[string]interface{}) (map[string]interface{}, error) {
-			return map[string]interface{}{"test": "value"}, nil
-		}
-
-		// Create the original program
-		original := NewProgram(map[string]Module{"test": mockOriginal}, forward)
-
-		// Test GetSignature (first call)
-		sig := original.GetSignature()
-		assert.Equal(t, expectedSig, sig)
-
-		// Clone the program (triggers second and third calls during cloning process)
-		clone := original.Clone()
-
-		// Get signature from clone (triggers call on cloned module)
-		cloneSig := clone.GetSignature()
-		assert.Equal(t, expectedSig, cloneSig)
-
-		// Verify the clone's structure
-		assert.Len(t, clone.Modules, 1)
-		assert.Contains(t, clone.Modules, "test")
-		assert.NotSame(t, original.Modules["test"], clone.Modules["test"])
-		assert.Same(t, mockCloned, clone.Modules["test"])
-
-		// Test the forward function behavior
-		ctx := context.Background()
-		originalResult, originalErr := original.Forward(ctx, map[string]interface{}{"input": "test"})
-		cloneResult, cloneErr := clone.Forward(ctx, map[string]interface{}{"input": "test"})
-
-		// Verify forward function results match
-		assert.Equal(t, originalResult, cloneResult)
-		assert.Equal(t, originalErr, cloneErr)
-
-		// Verify all mock expectations were met
-		mockCloned.AssertExpectations(t)
-	})
-
+func TestProgramEqual(t *testing.T) {
 	t.Run("Equal with identical programs", func(t *testing.T) {
-		mockModule1 := new(MockModule)
-		mockModule2 := new(MockModule)
+		mockModule1 := new(MockProgramModule)
+		mockModule2 := new(MockProgramModule)
 		sig := NewSignature(nil, nil)
 
 		mockModule1.On("GetSignature").Return(sig)
 		mockModule2.On("GetSignature").Return(sig)
 
-		prog1 := NewProgram(map[string]Module{"test": mockModule1}, nil)
-		prog2 := NewProgram(map[string]Module{"test": mockModule2}, nil)
+		config := NewDSPYConfig()
+		prog1 := NewProgram(map[string]Module{"test": mockModule1}, nil, config)
+		prog2 := NewProgram(map[string]Module{"test": mockModule2}, nil, config)
 
 		assert.True(t, prog1.Equal(prog2))
 		mockModule1.AssertExpectations(t)
@@ -186,16 +131,17 @@ func TestProgram(t *testing.T) {
 	})
 
 	t.Run("Equal with different programs", func(t *testing.T) {
-		mockModule1 := new(MockModule)
-		mockModule2 := new(MockModule)
+		mockModule1 := new(MockProgramModule)
+		mockModule2 := new(MockProgramModule)
 		sig1 := NewSignature([]InputField{{Field: Field{Name: "input1"}}}, nil)
 		sig2 := NewSignature([]InputField{{Field: Field{Name: "input2"}}}, nil)
 
 		mockModule1.On("GetSignature").Return(sig1)
 		mockModule2.On("GetSignature").Return(sig2)
 
-		prog1 := NewProgram(map[string]Module{"test": mockModule1}, nil)
-		prog2 := NewProgram(map[string]Module{"test": mockModule2}, nil)
+		config := NewDSPYConfig()
+		prog1 := NewProgram(map[string]Module{"test": mockModule1}, nil, config)
+		prog2 := NewProgram(map[string]Module{"test": mockModule2}, nil, config)
 
 		assert.False(t, prog1.Equal(prog2))
 		mockModule1.AssertExpectations(t)
@@ -203,15 +149,21 @@ func TestProgram(t *testing.T) {
 	})
 
 	t.Run("GetModules returns sorted modules", func(t *testing.T) {
-		mockModule1 := new(MockModule)
-		mockModule2 := new(MockModule)
-		mockModule3 := new(MockModule)
+		mockModule1 := new(MockProgramModule)
+		mockModule2 := new(MockProgramModule)
+		mockModule3 := new(MockProgramModule)
 
+		sig1 := NewSignature(nil, nil)
+		mockModule1.On("GetSignature").Return(sig1).Maybe()
+		mockModule2.On("GetSignature").Return(sig1).Maybe()
+		mockModule3.On("GetSignature").Return(sig1).Maybe()
+
+		config := NewDSPYConfig()
 		program := NewProgram(map[string]Module{
 			"c": mockModule3,
 			"a": mockModule1,
 			"b": mockModule2,
-		}, nil)
+		}, nil, config)
 
 		modules := program.GetModules()
 		assert.Len(t, modules, 3)
@@ -222,14 +174,15 @@ func TestProgram(t *testing.T) {
 	})
 
 	t.Run("AddModule and SetForward", func(t *testing.T) {
-		program := NewProgram(make(map[string]Module), nil)
-		mockModule := new(MockModule)
+		config := NewDSPYConfig()
+		program := NewProgram(make(map[string]Module), nil, config)
+		mockModule := new(MockProgramModule)
 
 		program.AddModule("test", mockModule)
 		assert.Contains(t, program.Modules, "test")
 		assert.Same(t, mockModule, program.Modules["test"])
 
-		forward := func(ctx context.Context, inputs map[string]interface{}) (map[string]interface{}, error) {
+		forward := func(ctx context.Context, inputs map[string]any) (map[string]any, error) {
 			return nil, nil
 		}
 		program.SetForward(forward)

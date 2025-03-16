@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/XiaoConstantine/dspy-go/pkg/core"
+	"github.com/scottdavis/dsgo/pkg/core"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -60,7 +60,7 @@ func TestParallelWorkflow(t *testing.T) {
 
 		// Execute workflow
 		ctx := context.Background()
-		result, err := workflow.Execute(ctx, map[string]interface{}{
+		result, err := workflow.Execute(ctx, map[string]any{
 			"input": "value",
 		})
 
@@ -90,7 +90,7 @@ func TestParallelWorkflow(t *testing.T) {
 		require.NoError(t, err, "Failed to add step1")
 
 		ctx := context.Background()
-		_, err = workflow.Execute(ctx, map[string]interface{}{
+		_, err = workflow.Execute(ctx, map[string]any{
 			"input": "value",
 		})
 

@@ -13,9 +13,6 @@ type Module interface {
 	// GetSignature returns the module's input and output signature
 	GetSignature() Signature
 
-	// SetLLM sets the language model for the module
-	SetLLM(llm LLM)
-
 	// Clone creates a deep copy of the module
 	Clone() Module
 }
@@ -85,17 +82,12 @@ func WithOptions(opts ...Option) Option {
 // BaseModule provides a basic implementation of the Module interface.
 type BaseModule struct {
 	Signature Signature
-	LLM       LLM
+	Config    *DSPYConfig
 }
 
 // GetSignature returns the module's signature.
 func (bm *BaseModule) GetSignature() Signature {
 	return bm.Signature
-}
-
-// SetLLM sets the language model for the module.
-func (bm *BaseModule) SetLLM(llm LLM) {
-	bm.LLM = llm
 }
 
 func (bm *BaseModule) SetSignature(signature Signature) {
@@ -111,14 +103,18 @@ func (bm *BaseModule) Process(ctx context.Context, inputs map[string]any, opts .
 func (bm *BaseModule) Clone() Module {
 	return &BaseModule{
 		Signature: bm.Signature,
-		LLM:       bm.LLM, // Note: This is a shallow copy of the LLM
+		Config:    bm.Config, // Note: This is a shallow copy of the config
 	}
 }
 
-// NewModule creates a new base module with the given signature.
-func NewModule(signature Signature) *BaseModule {
+// NewModule creates a new base module with the given signature and config.
+func NewModule(signature Signature, config *DSPYConfig) *BaseModule {
+	if config == nil {
+		config = NewDSPYConfig()
+	}
 	return &BaseModule{
 		Signature: signature,
+		Config:    config,
 	}
 }
 

@@ -11,10 +11,10 @@ import (
 	"os"
 	"strings"
 
-	"github.com/XiaoConstantine/dspy-go/pkg/core"
-	"github.com/XiaoConstantine/dspy-go/pkg/errors"
-	"github.com/XiaoConstantine/dspy-go/pkg/logging"
-	"github.com/XiaoConstantine/dspy-go/pkg/utils"
+	"github.com/scottdavis/dsgo/pkg/core"
+	"github.com/scottdavis/dsgo/pkg/errors"
+	"github.com/scottdavis/dsgo/pkg/logging"
+	"github.com/scottdavis/dsgo/pkg/utils"
 )
 
 // GeminiLLM implements the core.LLM interface for Google's Gemini model.
@@ -44,7 +44,7 @@ type geminiTool struct {
 type geminiFunctionDeclaration struct {
 	Name        string                 `json:"name"`
 	Description string                 `json:"description,omitempty"`
-	Parameters  map[string]interface{} `json:"parameters"`
+	Parameters  map[string]any `json:"parameters"`
 }
 type geminiContent struct {
 	Parts []geminiPart `json:"parts"`
@@ -94,7 +94,7 @@ type geminiFunctionResponse struct {
 }
 type geminiFunctionCall struct {
 	Name      string                 `json:"name"`
-	Arguments map[string]interface{} `json:"arguments"`
+	Arguments map[string]any `json:"arguments"`
 }
 
 // Request and response structures for Gemini embeddings.
@@ -109,7 +109,7 @@ type geminiEmbeddingRequest struct {
 	TaskType string `json:"taskType,omitempty"`
 	// Additional configuration
 	Title      string                 `json:"title,omitempty"`
-	Parameters map[string]interface{} `json:"parameters,omitempty"`
+	Parameters map[string]any `json:"parameters,omitempty"`
 }
 
 type geminiBatchEmbeddingRequest struct {
@@ -122,7 +122,7 @@ type geminiBatchEmbeddingRequest struct {
 		} `json:"content"`
 	} `json:"requests"`
 	TaskType   string                 `json:"taskType,omitempty"`
-	Parameters map[string]interface{} `json:"parameters,omitempty"`
+	Parameters map[string]any `json:"parameters,omitempty"`
 }
 
 type geminiEmbeddingResponse struct {
@@ -299,7 +299,7 @@ func (g *GeminiLLM) Generate(ctx context.Context, prompt string, options ...core
 }
 
 // GenerateWithJSON implements the core.LLM interface.
-func (g *GeminiLLM) GenerateWithJSON(ctx context.Context, prompt string, options ...core.GenerateOption) (map[string]interface{}, error) {
+func (g *GeminiLLM) GenerateWithJSON(ctx context.Context, prompt string, options ...core.GenerateOption) (map[string]any, error) {
 	response, err := g.Generate(ctx, prompt, options...)
 	if err != nil {
 		return nil, err
@@ -309,7 +309,7 @@ func (g *GeminiLLM) GenerateWithJSON(ctx context.Context, prompt string, options
 }
 
 // Implement the GenerateWithFunctions method for GeminiLLM.
-func (g *GeminiLLM) GenerateWithFunctions(ctx context.Context, prompt string, functions []map[string]interface{}, options ...core.GenerateOption) (map[string]interface{}, error) {
+func (g *GeminiLLM) GenerateWithFunctions(ctx context.Context, prompt string, functions []map[string]any, options ...core.GenerateOption) (map[string]any, error) {
 	logger := logging.GetLogger()
 	opts := core.NewGenerateOptions()
 	for _, opt := range options {
@@ -333,7 +333,7 @@ func (g *GeminiLLM) GenerateWithFunctions(ctx context.Context, prompt string, fu
 			description = desc
 		}
 
-		parameters, ok := function["parameters"].(map[string]interface{})
+		parameters, ok := function["parameters"].(map[string]any)
 		if !ok {
 			return nil, errors.WithFields(
 				errors.New(errors.InvalidInput, "function schema missing 'parameters' field"),
@@ -463,7 +463,7 @@ func (g *GeminiLLM) GenerateWithFunctions(ctx context.Context, prompt string, fu
 	}
 
 	// Process the response to extract function call if present
-	result := make(map[string]interface{})
+	result := make(map[string]any)
 
 	// Check if there was a function call
 	if len(geminiResp.Candidates[0].Content.Parts) > 0 {
@@ -472,7 +472,7 @@ func (g *GeminiLLM) GenerateWithFunctions(ctx context.Context, prompt string, fu
 		// Check if this part contains a function call
 		if part.FunctionCall != nil {
 			// Extract function call information
-			result["function_call"] = map[string]interface{}{
+			result["function_call"] = map[string]any{
 				"name":      part.FunctionCall.Name,
 				"arguments": part.FunctionCall.Arguments,
 			}
@@ -618,7 +618,7 @@ func (g *GeminiLLM) CreateEmbedding(ctx context.Context, input string, options .
 	result := &core.EmbeddingResult{
 		Vector:     geminiResp.Embedding.Values,
 		TokenCount: geminiResp.UsageMetadata.TotalTokenCount,
-		Metadata: map[string]interface{}{
+		Metadata: map[string]any{
 
 			"model":            opts.Model,
 			"prompt_tokens":    geminiResp.UsageMetadata.PromptTokenCount,
@@ -788,7 +788,7 @@ func (g *GeminiLLM) CreateEmbeddings(ctx context.Context, inputs []string, optio
 			result := core.EmbeddingResult{
 				Vector:     embedding.Embedding.Values,
 				TokenCount: embedding.UsageMetadata.TotalTokenCount,
-				Metadata: map[string]interface{}{
+				Metadata: map[string]any{
 					"model":            "text-embedding-004",
 					"prompt_tokens":    embedding.UsageMetadata.PromptTokenCount,
 					"truncated_tokens": embedding.Embedding.Statistics.TruncatedInputTokenCount,

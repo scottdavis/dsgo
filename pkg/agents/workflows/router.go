@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/XiaoConstantine/dspy-go/pkg/agents"
+	"github.com/scottdavis/dsgo/pkg/agents"
 
-	"github.com/XiaoConstantine/dspy-go/pkg/errors"
+	"github.com/scottdavis/dsgo/pkg/errors"
 )
 
 // RouterWorkflow directs inputs to different processing paths based on
@@ -39,9 +39,9 @@ func (w *RouterWorkflow) AddRoute(classification string, steps []*Step) error {
 	return nil
 }
 
-func (w *RouterWorkflow) Execute(ctx context.Context, inputs map[string]interface{}) (map[string]interface{}, error) {
+func (w *RouterWorkflow) Execute(ctx context.Context, inputs map[string]any) (map[string]any, error) {
 	// Initialize state
-	state := make(map[string]interface{})
+	state := make(map[string]any)
 	for k, v := range inputs {
 		state[k] = v
 	}
@@ -82,7 +82,7 @@ func (w *RouterWorkflow) Execute(ctx context.Context, inputs map[string]interfac
 	for _, step := range route {
 		signature := step.Module.GetSignature()
 
-		stepInputs := make(map[string]interface{})
+		stepInputs := make(map[string]any)
 		for _, field := range signature.Inputs {
 			if val, ok := state[field.Name]; ok {
 				stepInputs[field.Name] = val

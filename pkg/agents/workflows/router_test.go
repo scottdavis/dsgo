@@ -5,8 +5,8 @@ import (
 	"testing"
 
 	stderrors "errors" // Import standard errors package with an alias
-	"github.com/XiaoConstantine/dspy-go/pkg/core"
-	"github.com/XiaoConstantine/dspy-go/pkg/errors"
+	"github.com/scottdavis/dsgo/pkg/core"
+	"github.com/scottdavis/dsgo/pkg/errors"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -49,7 +49,7 @@ func TestRouterWorkflow(t *testing.T) {
 
 		// Execute workflow
 		ctx := context.Background()
-		result, err := workflow.Execute(ctx, map[string]interface{}{
+		result, err := workflow.Execute(ctx, map[string]any{
 			"input": "test",
 		})
 
@@ -75,7 +75,7 @@ func TestRouterWorkflow(t *testing.T) {
 		workflow := NewRouterWorkflow(memory, &Step{ID: "classifier", Module: classifier})
 
 		ctx := context.Background()
-		_, err := workflow.Execute(ctx, map[string]interface{}{
+		_, err := workflow.Execute(ctx, map[string]any{
 			"input": "test",
 		})
 
@@ -99,7 +99,7 @@ func TestRouterWorkflow(t *testing.T) {
 		workflow := NewRouterWorkflow(memory, &Step{ID: "classifier", Module: classifier})
 
 		ctx := context.Background()
-		_, err := workflow.Execute(ctx, map[string]interface{}{
+		_, err := workflow.Execute(ctx, map[string]any{
 			"input": "test",
 		})
 
@@ -124,7 +124,7 @@ func TestRouterWorkflow(t *testing.T) {
 		workflow := NewRouterWorkflow(memory, &Step{ID: "classifier", Module: classifier})
 
 		ctx := context.Background()
-		_, err := workflow.Execute(ctx, map[string]interface{}{
+		_, err := workflow.Execute(ctx, map[string]any{
 			"input": "test",
 		})
 
@@ -150,7 +150,7 @@ func TestRouterWorkflow(t *testing.T) {
 		workflow := NewRouterWorkflow(memory, &Step{ID: "classifier", Module: classifier})
 
 		ctx := context.Background()
-		_, err := workflow.Execute(ctx, map[string]interface{}{
+		_, err := workflow.Execute(ctx, map[string]any{
 			"input": "test",
 		})
 
@@ -191,7 +191,7 @@ func TestRouterWorkflow(t *testing.T) {
 		require.NoError(t, err)
 
 		ctx := context.Background()
-		_, err = workflow.Execute(ctx, map[string]interface{}{
+		_, err = workflow.Execute(ctx, map[string]any{
 			"input": "test",
 		})
 

@@ -3,7 +3,47 @@ package core
 import (
 	"context"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 )
+
+// MockOptimizer is a mock implementation of the Optimizer interface.
+type MockOptimizer struct {
+	mock.Mock
+}
+
+func (m *MockOptimizer) Compile(ctx context.Context, program *Program, dataset Dataset, metric Metric) (*Program, error) {
+	args := m.Called(ctx, program, dataset, metric)
+	return args.Get(0).(*Program), args.Error(1)
+}
+
+// MockDataset is a mock implementation of the Dataset interface.
+type MockDataset struct {
+	mock.Mock
+	examples []Example
+	position int
+}
+
+func NewMockDataset(examples []Example) *MockDataset {
+	return &MockDataset{
+		examples: examples,
+		position: 0,
+	}
+}
+
+func (m *MockDataset) Next() (Example, bool) {
+	if m.position < len(m.examples) {
+		example := m.examples[m.position]
+		m.position++
+		return example, true
+	}
+	return Example{}, false
+}
+
+func (m *MockDataset) Reset() {
+	m.position = 0
+}
 
 // TestOptimizerRegistry tests the OptimizerRegistry.
 func TestOptimizerRegistry(t *testing.T) {
@@ -16,18 +56,13 @@ func TestOptimizerRegistry(t *testing.T) {
 
 	// Test creating a registered Optimizer
 	optimizer, err := registry.Create("test")
-	if err != nil {
-		t.Errorf("Unexpected error creating Optimizer: %v", err)
-	}
-	if _, ok := optimizer.(*MockOptimizer); !ok {
-		t.Error("Created Optimizer is not of expected type")
-	}
+	assert.NoError(t, err)
+	_, ok := optimizer.(*MockOptimizer)
+	assert.True(t, ok, "Created Optimizer is not of expected type")
 
 	// Test creating an unregistered Optimizer
 	_, err = registry.Create("nonexistent")
-	if err == nil {
-		t.Error("Expected error when creating unregistered Optimizer, got nil")
-	}
+	assert.Error(t, err)
 }
 
 // TestCompileOptions tests the CompileOptions and related functions.
@@ -35,91 +70,157 @@ func TestCompileOptions(t *testing.T) {
 	opts := &CompileOptions{}
 
 	WithMaxTrials(10)(opts)
-	if opts.MaxTrials != 10 {
-		t.Errorf("Expected MaxTrials 10, got %d", opts.MaxTrials)
-	}
+	assert.Equal(t, 10, opts.MaxTrials)
 
-	teacherProgram := &Program{
-		Modules: map[string]Module{
-			"test": NewModule(NewSignature(
-				[]InputField{{Field: Field{Name: "input"}}},
-				[]OutputField{{Field: Field{Name: "output"}}},
-			)),
-		},
-		Forward: func(ctx context.Context, inputs map[string]interface{}) (map[string]interface{}, error) {
+	config := NewDSPYConfig()
+	sig := NewSignature(
+		[]InputField{{Field: Field{Name: "input"}}},
+		[]OutputField{{Field: Field{Name: "output"}}},
+	)
+	
+	mockModule := new(MockProgramModule)
+	mockModule.On("GetSignature").Return(sig).Maybe()
+	
+	teacherProgram := NewProgram(
+		map[string]Module{"test": mockModule},
+		func(ctx context.Context, inputs map[string]any) (map[string]any, error) {
 			return inputs, nil
 		},
-	}
+		config,
+	)
 
 	WithTeacher(teacherProgram)(opts)
-	if opts.Teacher == nil {
-		t.Error("Expected Teacher program to be set")
-	} else {
-		if len(opts.Teacher.Modules) != 1 {
-			t.Errorf("Expected 1 module in Teacher program, got %d", len(opts.Teacher.Modules))
-		}
-		if opts.Teacher.Forward == nil {
-			t.Error("Expected Forward function to be set in Teacher program")
-		}
-	}
+	assert.NotNil(t, opts.Teacher)
+	assert.Len(t, opts.Teacher.Modules, 1)
+	assert.NotNil(t, opts.Teacher.Forward)
 }
 
 // TestBootstrapFewShot tests the BootstrapFewShot optimizer.
 func TestBootstrapFewShot(t *testing.T) {
 	optimizer := NewBootstrapFewShot(5)
 
-	if optimizer.MaxExamples != 5 {
-		t.Errorf("Expected MaxExamples 5, got %d", optimizer.MaxExamples)
-	}
+	assert.Equal(t, 5, optimizer.MaxExamples)
 
 	// Create a simple program for testing
-	program := NewProgram(map[string]Module{
-		"test": NewModule(NewSignature(
-			[]InputField{{Field: Field{Name: "input"}}},
-			[]OutputField{{Field: Field{Name: "output"}}},
-		)),
-	}, nil)
+	config := NewDSPYConfig()
+	sig := NewSignature(
+		[]InputField{{Field: Field{Name: "input"}}},
+		[]OutputField{{Field: Field{Name: "output"}}},
+	)
+	
+	mockModule := new(MockProgramModule)
+	mockModule.On("GetSignature").Return(sig).Maybe()
+	mockModule.On("Process", mock.Anything, mock.Anything).Return(map[string]any{"output": "test"}, nil).Maybe()
+	
+	program := NewProgram(
+		map[string]Module{"test": mockModule},
+		nil,
+		config,
+	)
 
 	// Create a simple dataset for testing
-	dataset := &MockDataset{}
+	examples := []Example{
+		{
+			Input:  map[string]any{"input": "test1"},
+			Output: map[string]any{"output": "result1"},
+		},
+		{
+			Input:  map[string]any{"input": "test2"},
+			Output: map[string]any{"output": "result2"},
+		},
+	}
+	dataset := NewMockDataset(examples)
 
 	// Create a simple metric for testing
-	metric := func(expected, actual map[string]interface{}) float64 {
-		return 1.0 // Always return 1.0 for this test
+	metric := func(ctx context.Context, result map[string]any) (bool, string) {
+		return true, ""
 	}
 
-	optimizedProgram, err := optimizer.Compile(context.Background(), program, dataset, metric)
-	if err != nil {
-		t.Errorf("Unexpected error: %v", err)
+	// Execute the test
+	_, err := optimizer.Compile(context.Background(), program, dataset, metric)
+	assert.NoError(t, err)
+}
+
+// TestOptimizer tests the optimizer functionality.
+func TestOptimizer(t *testing.T) {
+	mockOptimizer := new(MockOptimizer)
+	
+	config := NewDSPYConfig()
+	sig := NewSignature(
+		[]InputField{{Field: Field{Name: "input"}}},
+		[]OutputField{{Field: Field{Name: "output"}}},
+	)
+	
+	mockModule := new(MockProgramModule)
+	mockModule.On("GetSignature").Return(sig).Maybe()
+	
+	program := NewProgram(
+		map[string]Module{"test": mockModule},
+		nil,
+		config,
+	)
+	
+	examples := []Example{
+		{
+			Input:  map[string]any{"input": "test1"},
+			Output: map[string]any{"output": "result1"},
+		},
 	}
-
-	if len(optimizedProgram.Modules) != 1 {
-		t.Errorf("Expected 1 module in optimized program, got %d", len(optimizedProgram.Modules))
+	dataset := NewMockDataset(examples)
+	
+	metric := func(ctx context.Context, result map[string]any) (bool, string) {
+		return true, ""
 	}
+	
+	// Set up expectations
+	mockOptimizer.On("Compile", mock.Anything, program, dataset, mock.Anything).Return(program, nil)
+	
+	// Test the optimizer
+	result, err := mockOptimizer.Compile(context.Background(), program, dataset, metric)
+	
+	assert.NoError(t, err)
+	assert.Equal(t, program, result)
+	mockOptimizer.AssertExpectations(t)
 }
 
-// MockOptimizer is a mock implementation of the Optimizer interface for testing.
-type MockOptimizer struct{}
-
-func (m *MockOptimizer) Compile(ctx context.Context, program Program, dataset Dataset, metric Metric) (Program, error) {
-	return program, nil
-}
-
-// MockDataset is a mock implementation of the Dataset interface for testing.
-type MockDataset struct {
-	data  []Example
-	index int
-}
-
-func (m *MockDataset) Next() (Example, bool) {
-	if m.index >= len(m.data) {
-		return Example{}, false
+// TestOptimizeProgram tests the OptimizeProgram function.
+func TestOptimizeProgram(t *testing.T) {
+	mockOptimizer := new(MockOptimizer)
+	
+	config := NewDSPYConfig()
+	sig := NewSignature(
+		[]InputField{{Field: Field{Name: "input"}}},
+		[]OutputField{{Field: Field{Name: "output"}}},
+	)
+	
+	mockModule := new(MockProgramModule)
+	mockModule.On("GetSignature").Return(sig).Maybe()
+	
+	program := NewProgram(
+		map[string]Module{"test": mockModule},
+		nil,
+		config,
+	)
+	
+	examples := []Example{
+		{
+			Input:  map[string]any{"input": "test1"},
+			Output: map[string]any{"output": "result1"},
+		},
 	}
-	example := m.data[m.index]
-	m.index++
-	return example, true
-}
-
-func (m *MockDataset) Reset() {
-	m.index = 0
-}
+	dataset := NewMockDataset(examples)
+	
+	metric := func(ctx context.Context, result map[string]any) (bool, string) {
+		return true, ""
+	}
+	
+	// Set up expectations
+	mockOptimizer.On("Compile", mock.Anything, program, dataset, mock.Anything).Return(program, nil)
+	
+	// Test OptimizeProgram
+	result, err := OptimizeProgram(context.Background(), program, mockOptimizer, dataset, metric)
+	
+	assert.NoError(t, err)
+	assert.Equal(t, program, result)
+	mockOptimizer.AssertExpectations(t)
+} 

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/XiaoConstantine/dspy-go/pkg/agents"
+	"github.com/scottdavis/dsgo/pkg/agents"
 )
 
 // ParallelWorkflow executes multiple steps concurrently.
@@ -22,8 +22,8 @@ func NewParallelWorkflow(memory agents.Memory, maxConcurrent int) *ParallelWorkf
 	}
 }
 
-func (w *ParallelWorkflow) Execute(ctx context.Context, inputs map[string]interface{}) (map[string]interface{}, error) {
-	state := make(map[string]interface{})
+func (w *ParallelWorkflow) Execute(ctx context.Context, inputs map[string]any) (map[string]any, error) {
+	state := make(map[string]any)
 	for k, v := range inputs {
 		state[k] = v
 	}
@@ -47,7 +47,7 @@ func (w *ParallelWorkflow) Execute(ctx context.Context, inputs map[string]interf
 			defer func() { <-sem }()
 
 			// Prepare inputs for this step
-			stepInputs := make(map[string]interface{})
+			stepInputs := make(map[string]any)
 			signature := step.Module.GetSignature()
 
 			for _, field := range signature.Inputs {

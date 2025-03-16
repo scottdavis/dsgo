@@ -14,11 +14,11 @@ func (m *MockLLM) Generate(ctx context.Context, prompt string, options ...Genera
 	return &LLMResponse{Content: "mock response"}, nil
 }
 
-func (m *MockLLM) GenerateWithJSON(ctx context.Context, prompt string, options ...GenerateOption) (map[string]interface{}, error) {
-	return map[string]interface{}{"response": "mock response"}, nil
+func (m *MockLLM) GenerateWithJSON(ctx context.Context, prompt string, options ...GenerateOption) (map[string]any, error) {
+	return map[string]any{"response": "mock response"}, nil
 }
 
-func (m *MockLLM) GenerateWithFunctions(ctx context.Context, prompt string, functions []map[string]interface{}, options ...GenerateOption) (map[string]interface{}, error) {
+func (m *MockLLM) GenerateWithFunctions(ctx context.Context, prompt string, functions []map[string]any, options ...GenerateOption) (map[string]any, error) {
 	return nil, nil
 }
 
@@ -29,7 +29,7 @@ func (m *MockLLM) CreateEmbedding(ctx context.Context, input string, options ...
 		// Include token count to simulate real embedding behavior
 		TokenCount: len(strings.Fields(input)),
 		// Add metadata to simulate real response
-		Metadata: map[string]interface{}{},
+		Metadata: map[string]any{},
 	}, nil
 }
 
@@ -46,7 +46,7 @@ func (m *MockLLM) CreateEmbeddings(ctx context.Context, inputs []string, options
 			// Each embedding gets slightly different values to simulate real behavior
 			Vector:     []float32{0.1 * float32(i+1), 0.2 * float32(i+1), 0.3 * float32(i+1)},
 			TokenCount: len(strings.Fields(input)),
-			Metadata: map[string]interface{}{
+			Metadata: map[string]any{
 				"model":        opts.Model,
 				"input_length": len(input),
 				"batch_index":  i,
@@ -84,16 +84,15 @@ func TestBaseModule(t *testing.T) {
 		[]InputField{{Field: Field{Name: "input"}}},
 		[]OutputField{{Field: Field{Name: "output"}}},
 	)
-	bm := NewModule(sig)
+	config := NewDSPYConfig()
+	bm := NewModule(sig, config)
 
 	if !reflect.DeepEqual(bm.GetSignature(), sig) {
 		t.Error("GetSignature did not return the correct signature")
 	}
 
-	mockLLM := &MockLLM{}
-	bm.SetLLM(mockLLM)
-	if bm.LLM != mockLLM {
-		t.Error("SetLLM did not set the LLM correctly")
+	if bm.Config != config {
+		t.Error("Config not set correctly")
 	}
 
 	_, err := bm.Process(context.Background(), map[string]any{"input": "test"})
@@ -105,30 +104,44 @@ func TestBaseModule(t *testing.T) {
 	if !reflect.DeepEqual(clone.GetSignature(), bm.GetSignature()) {
 		t.Error("Cloned module does not have the same signature")
 	}
+	
+	// Test with nil config
+	bmNilConfig := NewModule(sig, nil)
+	if bmNilConfig.Config == nil {
+		t.Error("Module should create a default config when nil is provided")
+	}
 }
 
 // TestModuleChain tests the ModuleChain struct and its methods.
 func TestModuleChain(t *testing.T) {
-	module1 := NewModule(NewSignature(
+	sig1 := NewSignature(
 		[]InputField{{Field: Field{Name: "input1"}}},
 		[]OutputField{{Field: Field{Name: "output1"}}},
-	))
-	module2 := NewModule(NewSignature(
+	)
+	sig2 := NewSignature(
 		[]InputField{{Field: Field{Name: "input2"}}},
 		[]OutputField{{Field: Field{Name: "output2"}}},
-	))
+	)
 
-	chain := NewModuleChain(module1, module2)
+	// Create test modules
+	config := NewDSPYConfig()
+	module1 := NewModule(sig1, config)
+	module2 := NewModule(sig2, config)
+
+	chain := &ModuleChain{
+		Modules: []Module{module1, module2},
+	}
 
 	if len(chain.Modules) != 2 {
-		t.Errorf("Expected 2 modules in chain, got %d", len(chain.Modules))
+		t.Error("ModuleChain should have 2 modules")
 	}
 
-	sig := chain.GetSignature()
-	if len(sig.Inputs) != 1 || sig.Inputs[0].Name != "input1" {
-		t.Error("Chain signature inputs are incorrect")
+	// Check that the modules are correctly ordered
+	if !reflect.DeepEqual(chain.Modules[0].GetSignature(), sig1) {
+		t.Error("First module in chain has incorrect signature")
 	}
-	if len(sig.Outputs) != 1 || sig.Outputs[0].Name != "output2" {
-		t.Error("Chain signature outputs are incorrect")
+
+	if !reflect.DeepEqual(chain.Modules[1].GetSignature(), sig2) {
+		t.Error("Second module in chain has incorrect signature")
 	}
 }

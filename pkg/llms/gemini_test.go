@@ -8,7 +8,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/XiaoConstantine/dspy-go/pkg/core"
+	"github.com/scottdavis/dsgo/pkg/core"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -228,7 +228,7 @@ func TestGeminiLLM_GenerateWithJSON(t *testing.T) {
 		name           string
 		serverResponse geminiResponse
 		expectError    bool
-		expectedJSON   map[string]interface{}
+		expectedJSON   map[string]any
 	}{
 		{
 			name: "Valid JSON response",
@@ -256,7 +256,7 @@ func TestGeminiLLM_GenerateWithJSON(t *testing.T) {
 				},
 			},
 			expectError:  false,
-			expectedJSON: map[string]interface{}{"key": "value"},
+			expectedJSON: map[string]any{"key": "value"},
 		},
 		{
 			name: "Invalid JSON response",

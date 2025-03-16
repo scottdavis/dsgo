@@ -3,7 +3,7 @@ package logging
 import (
 	"context"
 
-	"github.com/XiaoConstantine/dspy-go/pkg/core"
+	"github.com/scottdavis/dsgo/pkg/core"
 )
 
 // contextKey is a custom type for context keys to avoid collisions.
@@ -35,7 +35,7 @@ type LogEntry struct {
 	Cost      float64         // Operation cost in dollars
 
 	// General structured data
-	Fields map[string]interface{}
+	Fields map[string]any
 }
 
 // WithModelID adds a ModelID to the context.

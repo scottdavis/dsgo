@@ -3,12 +3,12 @@ package utils
 import (
 	"encoding/json"
 
-	"github.com/XiaoConstantine/dspy-go/pkg/errors"
+	"github.com/scottdavis/dsgo/pkg/errors"
 )
 
 // ParseJSONResponse attempts to parse a string response as JSON.
-func ParseJSONResponse(response string) (map[string]interface{}, error) {
-	var result map[string]interface{}
+func ParseJSONResponse(response string) (map[string]any, error) {
+	var result map[string]any
 	err := json.Unmarshal([]byte(response), &result)
 	if err != nil {
 		return nil, errors.WithFields(

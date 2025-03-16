@@ -24,7 +24,7 @@ type ExecutionState struct {
 	tokenUsage *TokenUsage
 
 	// Custom annotations
-	annotations map[string]interface{}
+	annotations map[string]any
 }
 
 // Span represents a single operation within the execution.
@@ -35,7 +35,7 @@ type Span struct {
 	StartTime   time.Time
 	EndTime     time.Time
 	Error       error
-	Annotations map[string]interface{}
+	Annotations map[string]any
 }
 
 // TokenUsage tracks token consumption.
@@ -53,7 +53,7 @@ type spanIDGenerator struct {
 	lastTimestamp int64
 }
 
-// ExecutionContextKey is the type for context keys specific to dspy-go.
+// ExecutionContextKey is the type for context keys specific to dsgo.
 type ExecutionContextKey struct {
 	name string
 }
@@ -63,14 +63,14 @@ var (
 	defaultGenerator = &spanIDGenerator{}
 )
 
-// WithExecutionState creates a new context with dspy-go execution state.
+// WithExecutionState creates a new context with dsgo execution state.
 func WithExecutionState(ctx context.Context) context.Context {
 	if GetExecutionState(ctx) != nil {
 		return ctx // State already exists
 	}
 	return context.WithValue(ctx, stateKey, &ExecutionState{
 		traceID:     generateTraceID(),
-		annotations: make(map[string]interface{}),
+		annotations: make(map[string]any),
 		spans:       make([]*Span, 0),
 	})
 }
@@ -98,7 +98,7 @@ func StartSpan(ctx context.Context, operation string) (context.Context, *Span) {
 		ID:          generateSpanID(), // Implementation needed
 		Operation:   operation,
 		StartTime:   time.Now(),
-		Annotations: make(map[string]interface{}),
+		Annotations: make(map[string]any),
 	}
 
 	if state.activeSpan != nil {
@@ -155,7 +155,7 @@ func (s *Span) WithError(err error) {
 	s.Error = err
 }
 
-func (s *Span) WithAnnotation(key string, value interface{}) {
+func (s *Span) WithAnnotation(key string, value any) {
 	s.Annotations[key] = value
 }
 

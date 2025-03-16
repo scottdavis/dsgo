@@ -12,8 +12,8 @@ import (
 
 type HotPotQAExample struct {
 	ID              string          `json:"_id"`
-	SupportingFacts [][]interface{} `json:"supporting_facts"`
-	Context         [][]interface{} `json:"context"`
+	SupportingFacts [][]any `json:"supporting_facts"`
+	Context         [][]any `json:"context"`
 	Question        string          `json:"question"`
 	Answer          string          `json:"answer"`
 	Type            string          `json:"type"`

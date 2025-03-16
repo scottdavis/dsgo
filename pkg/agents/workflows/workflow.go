@@ -4,13 +4,13 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/XiaoConstantine/dspy-go/pkg/agents"
+	"github.com/scottdavis/dsgo/pkg/agents"
 )
 
 // Workflow represents a sequence of steps that accomplish a task.
 type Workflow interface {
 	// Execute runs the workflow with the provided inputs
-	Execute(ctx context.Context, inputs map[string]interface{}) (map[string]interface{}, error)
+	Execute(ctx context.Context, inputs map[string]any) (map[string]any, error)
 
 	// GetSteps returns all steps in this workflow
 	GetSteps() []*Step

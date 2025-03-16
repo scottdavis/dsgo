@@ -32,13 +32,13 @@ func (m *MockBaseLLM) Generate(ctx context.Context, prompt string, options ...Ge
 	return nil, args.Error(1)
 }
 
-func (m *MockBaseLLM) GenerateWithFunctions(ctx context.Context, prompt string, functions []map[string]interface{}, options ...GenerateOption) (map[string]interface{}, error) {
+func (m *MockBaseLLM) GenerateWithFunctions(ctx context.Context, prompt string, functions []map[string]any, options ...GenerateOption) (map[string]any, error) {
 	return nil, nil
 }
 
-func (m *MockBaseLLM) GenerateWithJSON(ctx context.Context, prompt string, options ...GenerateOption) (map[string]interface{}, error) {
+func (m *MockBaseLLM) GenerateWithJSON(ctx context.Context, prompt string, options ...GenerateOption) (map[string]any, error) {
 	args := m.Called(ctx, prompt, options)
-	return args.Get(0).(map[string]interface{}), args.Error(1)
+	return args.Get(0).(map[string]any), args.Error(1)
 }
 
 // CreateEmbedding mocks the single embedding creation following the same pattern as Generate.
@@ -61,7 +61,7 @@ func (m *MockBaseLLM) CreateEmbedding(ctx context.Context, input string, options
 	return &EmbeddingResult{
 		Vector:     []float32{0.1, 0.2, 0.3}, // Default vector
 		TokenCount: len(input),
-		Metadata: map[string]interface{}{
+		Metadata: map[string]any{
 			"fallback": true,
 		},
 	}, args.Error(1)
@@ -88,7 +88,7 @@ func (m *MockBaseLLM) CreateEmbeddings(ctx context.Context, inputs []string, opt
 		embeddings[i] = EmbeddingResult{
 			Vector:     []float32{0.1, 0.2, 0.3},
 			TokenCount: len(inputs[i]),
-			Metadata: map[string]interface{}{
+			Metadata: map[string]any{
 				"fallback": true,
 				"index":    i,
 			},
