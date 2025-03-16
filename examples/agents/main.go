@@ -290,12 +290,31 @@ func RunOrchestratorExample(ctx context.Context, logger *logging.Logger, dspyCon
     
     Keep your XML well-formed with proper closing tags for every opening tag.
     Every task MUST have an id, type, and processor attribute.`
-	
+
 	parser := &agents.XMLTaskParser{
 		RequiredFields: []string{"id", "type", "processor"},
 	}
 
 	planner := agents.NewDependencyPlanCreator(5) // Max 5 tasks per phase
+
+	// Define streaming handler
+	streamHandler := func(chunk core.StreamChunk) error {
+		logger := logging.GetLogger()
+		ctx := context.Background()
+		if chunk.Error != nil {
+			logger.Info(ctx, "Error: %v\n", chunk.Error)
+			return chunk.Error
+		}
+
+		if chunk.Done {
+			logger.Info(ctx, "\n[DONE]")
+			return nil
+		}
+
+		// Display chunks as they arrive
+		logger.Info(ctx, "Get chunk: %v", chunk.Content)
+		return nil
+	}
 
 	// Create orchestrator configuration (separate from DSPYConfig)
 	orchConfig := agents.OrchestrationConfig{
@@ -321,9 +340,12 @@ func RunOrchestratorExample(ctx context.Context, logger *logging.Logger, dspyCon
 				"Task priorities and resource requirements",
 			},
 		},
-		Options: core.WithGenerateOptions(
-			core.WithTemperature(0.2), // Lower temperature for more precise XML generation
-			core.WithMaxTokens(8192),
+		Options: core.WithOptions(
+			core.WithGenerateOptions(
+				core.WithTemperature(0.2), // Lower temperature for more precise XML generation
+				core.WithMaxTokens(8192),
+			),
+			core.WithStreamHandler(streamHandler),
 		),
 	}
 
@@ -347,12 +369,12 @@ func RunOrchestratorExample(ctx context.Context, logger *logging.Logger, dspyCon
 			for taskID, taskErr := range result.FailedTasks {
 				logger.Error(ctx, "Task %s failed: %v", taskID, taskErr)
 			}
-			
+
 			// Log successful tasks with details
 			for taskID, taskResult := range result.CompletedTasks {
 				logger.Info(ctx, "Task %s completed successfully with result: %v", taskID, taskResult)
 			}
-			
+
 			// Handle results
 			logger.Info(ctx, "Orchestration completed with %d successful tasks and %d failures",
 				len(result.CompletedTasks), len(result.FailedTasks))
@@ -361,7 +383,7 @@ func RunOrchestratorExample(ctx context.Context, logger *logging.Logger, dspyCon
 		}
 		return
 	}
-	
+
 	// Only try to access results if there was no error
 	// Log successful tasks with details
 	for taskID, taskResult := range result.CompletedTasks {
@@ -386,7 +408,7 @@ func main() {
 		os.Exit(1)
 	}
 	logger := logging.NewLogger(logging.Config{
-		Severity: logging.DEBUG,
+		Severity: logging.INFO,
 		Outputs:  []logging.Output{output, fileOutput},
 	})
 	logging.SetLogger(logger)
@@ -411,14 +433,14 @@ func main() {
 	fmt.Println("=== Example 1: Using OpenRouterConfig ===")
 	// Create a model ID string with the openrouter prefix
 	modelID := core.ModelID("openrouter:deepseek/deepseek-r1:free")
-	
+
 	// Create the LLM directly using the model ID
 	llm, err := llms.NewLLM(apiKey, modelID)
 	if err != nil {
 		fmt.Printf("Error creating LLM: %v\n", err)
 		os.Exit(1)
 	}
-	
+
 	// Create DSPYConfig with the LLM
 	dspyConfig := core.NewDSPYConfig().WithDefaultLLM(llm)
 
@@ -445,7 +467,7 @@ func CreateClassifierStep(dspyConfig *core.DSPYConfig) *workflows.Step {
     First explain your reasoning, then provide your selection.
     You must classify the ticket into exactly one of these categories: "billing", "technical", "account", or "product".
     Do not use any other classification values.`)
-	
+
 	// Create a specialized predict module that formats the response correctly
 	predictModule := modules.NewPredict(signature, dspyConfig)
 
@@ -714,8 +736,8 @@ func (p *ExampleProcessor) Process(ctx context.Context, task agents.Task, taskCo
 func (p *ExampleProcessor) handleAnalysisTask(task agents.Task, taskContext map[string]interface{}) (interface{}, error) {
 	// Simulate analysis work
 	result := map[string]interface{}{
-		"status":      "completed",
-		"analysis":    "Sample analysis of quarterly data",
+		"status":       "completed",
+		"analysis":     "Sample analysis of quarterly data",
 		"top_products": []string{"Product A", "Product B", "Product C"},
 		"trends": map[string]string{
 			"north": "increasing",
@@ -740,7 +762,7 @@ func (p *ExampleProcessor) handleDecompositionTask(task agents.Task, taskContext
 func (p *ExampleProcessor) handleFormattingTask(task agents.Task, taskContext map[string]interface{}) (interface{}, error) {
 	// Check for dependencies in the task context
 	var analysisResult map[string]interface{}
-	
+
 	// Look for analysis results from other tasks
 	for taskID, result := range taskContext {
 		if strings.Contains(taskID, "analysis") {
@@ -750,12 +772,12 @@ func (p *ExampleProcessor) handleFormattingTask(task agents.Task, taskContext ma
 			}
 		}
 	}
-	
+
 	// Generate report based on analysis or with placeholder data if not found
 	report := ""
 	if analysisResult != nil {
 		report = "# Quarterly Sales Report\n\n"
-		
+
 		// Add top products if available
 		if products, ok := analysisResult["top_products"].([]string); ok && len(products) > 0 {
 			report += "## Top Performing Products\n"
@@ -764,7 +786,7 @@ func (p *ExampleProcessor) handleFormattingTask(task agents.Task, taskContext ma
 			}
 			report += "\n"
 		}
-		
+
 		// Add trends if available
 		if trends, ok := analysisResult["trends"].(map[string]string); ok && len(trends) > 0 {
 			report += "## Regional Trends\n"
@@ -782,7 +804,7 @@ func (p *ExampleProcessor) handleFormattingTask(task agents.Task, taskContext ma
 		report += "- Gather more data\n"
 		report += "- Schedule follow-up meeting\n"
 	}
-	
+
 	// Return formatted report
 	return map[string]interface{}{
 		"status": "completed",

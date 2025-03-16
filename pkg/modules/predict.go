@@ -49,6 +49,10 @@ func (p *Predict) Process(ctx context.Context, inputs map[string]any, opts ...co
 	}
 
 	finalOptions := p.defaultOptions.MergeWith(callOptions)
+
+	if callOptions.StreamHandler != nil {
+		return p.processWithStreaming(ctx, inputs, callOptions.StreamHandler, finalOptions)
+	}
 	ctx, span := core.StartSpan(ctx, "Predict")
 	defer core.EndSpan(ctx)
 	span.WithAnnotation("inputs", inputs)
@@ -124,7 +128,103 @@ func (p *Predict) GetDemos() []core.Example {
 	return p.Demos
 }
 
-// formatPrompt creates a prompt from the signature, demonstrations, and inputs.
+func (p *Predict) processWithStreaming(ctx context.Context, inputs map[string]interface{},
+	handler core.StreamHandler, opts *core.ModuleOptions) (map[string]interface{}, error) {
+	logger := logging.GetLogger()
+	ctx, span := core.StartSpan(ctx, "PredictStream")
+	defer core.EndSpan(ctx)
+
+	// Validate inputs and build prompt (same as regular Process)
+	if err := p.ValidateInputs(inputs); err != nil {
+		span.WithError(err)
+		return nil, errors.WithFields(
+			errors.Wrap(err, errors.ValidationFailed, "input validation failed"),
+			errors.Fields{
+				"module": "Predict",
+				"inputs": inputs,
+			})
+	}
+
+	signature := p.GetSignature()
+	prompt := formatPrompt(signature, p.Demos, inputs)
+
+	// Use StreamGenerate instead of Generate
+	stream, err := p.Config.DefaultLLM.StreamGenerate(ctx, prompt, opts.GenerateOptions...)
+	if err != nil {
+		span.WithError(err)
+		return nil, errors.WithFields(
+			errors.Wrap(err, errors.LLMGenerationFailed, "failed to generate prediction"),
+			errors.Fields{
+				"module": "Predict",
+				"prompt": prompt,
+				"model":  p.Config.DefaultLLM,
+			})
+	}
+
+	// Collect the full response while streaming chunks
+	var fullContent strings.Builder
+	var tokenUsage core.TokenInfo
+
+	for chunk := range stream.ChunkChannel {
+		logger.Debug(ctx, "Predict received chunk: Done=%v, Error=%v, ContentLen=%d",
+			chunk.Done, chunk.Error != nil, len(chunk.Content))
+		// Update token usage if available
+		if chunk.Usage != nil {
+			tokenUsage.PromptTokens = chunk.Usage.PromptTokens
+			tokenUsage.CompletionTokens += chunk.Usage.CompletionTokens
+			tokenUsage.TotalTokens = tokenUsage.PromptTokens + tokenUsage.CompletionTokens
+		}
+
+		// Handle errors
+		if chunk.Error != nil {
+			span.WithError(chunk.Error)
+			return nil, chunk.Error
+		}
+
+		// Check if done
+		if chunk.Done {
+			if err := handler(chunk); err != nil {
+				stream.Cancel()
+				return nil, err
+			}
+			break
+		}
+
+		// Append content to the full response
+		fullContent.WriteString(chunk.Content)
+
+		// Call the handler
+		if err := handler(chunk); err != nil {
+			stream.Cancel() // Cancel the stream
+			return nil, err
+		}
+	}
+
+	logger.Debug(ctx, "Stream channel closed, ensuring Done signal is sent")
+	if err := handler(core.StreamChunk{Done: true}); err != nil {
+		return nil, err
+	}
+
+	// Process the complete response just like in the normal flow
+	content := fullContent.String()
+	logger.Debug(ctx, "Complete response: %s", content)
+
+	cleaned := stripMarkdown(content, p.GetSignature())
+	outputs := parseCompletion(cleaned, signature)
+	formattedOutputs := p.FormatOutputs(outputs)
+
+	// Update execution state with token usage
+	if state := core.GetExecutionState(ctx); state != nil {
+		state.WithTokenUsage(&core.TokenUsage{
+			PromptTokens:     tokenUsage.PromptTokens,
+			CompletionTokens: tokenUsage.CompletionTokens,
+			TotalTokens:      tokenUsage.TotalTokens,
+		})
+	}
+
+	return formattedOutputs, nil
+}
+
 func formatPrompt(signature core.Signature, demos []core.Example, inputs map[string]any) string {
 	var sb strings.Builder
 
