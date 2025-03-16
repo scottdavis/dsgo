@@ -58,7 +58,8 @@ func TestSQLiteStoreInitialization(t *testing.T) {
 	require.True(t, hasTable, "memory_store table should exist")
 }
 
-func TestSQLiteStore(t *testing.T) {
+// TestSQLiteStoreOperations tests various operations on the SQLite store
+func TestSQLiteStoreOperations(t *testing.T) {
 	// Create an in-memory database for testing
 	store, err := NewSQLiteStore(":memory:")
 	require.NoError(t, err)
