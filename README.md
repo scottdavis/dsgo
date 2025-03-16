@@ -1,7 +1,7 @@
 # DSGo
 [![Go Report Card](https://goreportcard.com/badge/github.com/scottdavis/dsgo)](https://goreportcard.com/report/github.com/scottdavis/dsgo)
-[![codecov](https://codecov.io/gh/scottdavis/dsgo/graph/badge.svg)](https://codecov.io/gh/scottdavis/dsgo)
 [![Go Reference](https://pkg.go.dev/badge/github.com/scottdavis/dsgo)](https://pkg.go.dev/github.com/scottdavis/dsgo)
+
 **This is mostly for my personal use, so support is not guaranteed.**
 
 A Go implementation of the Declarative Self-improving programming (DSPy) pattern.
