@@ -1,5 +1,7 @@
 # DSGo
-
+[![Go Report Card](https://goreportcard.com/badge/github.com/scottdavis/dsgo)](https://goreportcard.com/report/github.com/scottdavis/dsgo)
+[![codecov](https://codecov.io/gh/scottdavis/dsgo/graph/badge.svg)](https://codecov.io/gh/scottdavis/dsgo)
+[![Go Reference](https://pkg.go.dev/badge/github.com/scottdavis/dsgo)](https://pkg.go.dev/github.com/scottdavis/dsgo)
 **This is mostly for my personal use, so support is not guaranteed.**
 
 A Go implementation of the Declarative Self-improving programming (DSPy) pattern.
@@ -15,10 +17,8 @@ This fork includes several enhancements to the original project:
 - **Advanced LLM Configuration**: Added more flexible ways to configure Ollama with custom hosts via multiple format options
 - **Ability to inject llm instances**: into functions so you cna use different llms for different parts/steps of your program
 - **OpenRouter Integration**: Full support for [OpenRouter](https://openrouter.ai) as an LLM provider, enabling access to hundreds of AI models through a single interface
+- **Interface for Memory**: Added an interface for memory, allowing you to use different memory backends, including Redis
 
-[![Go Report Card](https://goreportcard.com/badge/github.com/scottdavis/dsgo)](https://goreportcard.com/report/github.com/scottdavis/dsgo)
-[![codecov](https://codecov.io/gh/scottdavis/dsgo/graph/badge.svg)](https://codecov.io/gh/scottdavis/dsgo)
-[![Go Reference](https://pkg.go.dev/badge/github.com/scottdavis/dsgo)](https://pkg.go.dev/github.com/scottdavis/dsgo)
 
 
 DSGo is a Go implementation of DSPy, bringing systematic prompt engineering and automated reasoning capabilities to Go applications. It provides a flexible framework for building reliable and effective Language Model (LLM) applications through composable modules and workflows.

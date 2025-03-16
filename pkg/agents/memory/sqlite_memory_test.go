@@ -15,6 +15,50 @@ import (
 )
 
 func TestSQLiteStore(t *testing.T) {
+	// Test with in-memory database
+	t.Run("InMemory", func(t *testing.T) {
+		store, err := NewSQLiteStore(":memory:")
+		require.NoError(t, err)
+		defer store.Close()
+
+		MemoryTestSuite(t, "SQLite-InMemory", store)
+	})
+
+	// Test with file-based database
+	t.Run("FileBasedDB", func(t *testing.T) {
+		tempFile, err := os.CreateTemp("", "sqlite-test-*.db")
+		require.NoError(t, err)
+		
+		dbPath := tempFile.Name()
+		tempFile.Close()
+		
+		// Clean up the temp file when done
+		defer os.Remove(dbPath)
+
+		store, err := NewSQLiteStore(dbPath)
+		require.NoError(t, err)
+		defer store.Close()
+
+		MemoryTestSuite(t, "SQLite-FileBased", store)
+	})
+}
+
+// TestSQLiteStoreInitialization tests specific SQLite initialization scenarios
+func TestSQLiteStoreInitialization(t *testing.T) {
+	store, err := NewSQLiteStore(":memory:")
+	require.NoError(t, err)
+	defer store.Close()
+
+	// Test that the table is created
+	rows, err := store.db.Query("SELECT name FROM sqlite_master WHERE type='table' AND name='memory_store'")
+	require.NoError(t, err)
+	defer rows.Close()
+
+	hasTable := rows.Next()
+	require.True(t, hasTable, "memory_store table should exist")
+}
+
+func TestSQLiteStore(t *testing.T) {
 	// Create an in-memory database for testing
 	store, err := NewSQLiteStore(":memory:")
 	require.NoError(t, err)

@@ -34,6 +34,18 @@ clean:
 test:
 	$(GOTEST) $(PKGS) -v
 
+# Run integration tests that require external services
+# These tests are skipped unless environment variables are set
+.PHONY: test-integration
+test-integration:
+	@echo "Running integration tests..."
+	@if [ -z "$(REDIS_TEST_ADDR)" ]; then \
+		echo "REDIS_TEST_ADDR not set, Redis tests will be skipped"; \
+	else \
+		echo "Using Redis at: $(REDIS_TEST_ADDR)"; \
+	fi
+	$(GOTEST) $(PKGS) -v
+
 # Run tests with a custom timeout
 .PHONY: test-timeout
 test-timeout:
