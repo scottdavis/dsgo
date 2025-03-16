@@ -8,12 +8,51 @@ permissions:
   contents: read
 
 jobs:
-  unit-tests:
-    name: Run Unit Tests
+  unit-tests-linux:
+    name: Run Unit Tests (Linux with Redis)
+    runs-on: ubuntu-latest
+
+    services:
+      # Redis service for memory storage tests
+      redis:
+        image: redis:latest
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: "go.mod"
+
+      - name: Download dependencies
+        run: go mod download
+        
+      - name: Install Redis dependency
+        run: go get github.com/redis/go-redis/v9
+
+      - name: Run standard tests
+        run: go test ./... -v
+      
+      - name: Run Redis tests
+        run: go test -tags=redis ./... -v
+        env:
+          REDIS_TEST_ADDR: localhost:6379
+
+  unit-tests-others:
+    name: Run Unit Tests (${{ matrix.os }})
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest, ubuntu-latest, windows-latest]
+        os: [macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
 
     steps:
@@ -27,6 +66,9 @@ jobs:
 
       - name: Download dependencies
         run: go mod download
+        
+      - name: Install Redis dependency
+        run: go get github.com/redis/go-redis/v9
 
       - name: Run unit tests
-        run: make test
+        run: go test ./... -v

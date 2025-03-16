@@ -22,6 +22,9 @@ type SQLiteStore struct {
 	initialized sync.Once
 }
 
+// Ensure SQLiteStore implements Memory interface
+var _ Memory = (*SQLiteStore)(nil)
+
 // NewSQLiteStore creates a new SQLite-backed memory store.
 // The path parameter specifies the database file location.
 // If path is ":memory:", the database will be created in-memory.

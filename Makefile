@@ -34,6 +34,39 @@ clean:
 test:
 	$(GOTEST) $(PKGS) -v
 
+# Run tests with Redis build tag
+.PHONY: test-tag-redis
+test-tag-redis:
+	$(GOTEST) -tags=redis $(PKGS) -v
+
+# Run only Redis tests
+.PHONY: test-only-redis
+test-only-redis:
+	$(GOTEST) -tags=redis -run=TestRedis ./pkg/agents/memory/... -v
+
+# Run Redis tests with Docker
+.PHONY: test-redis
+test-redis:
+	@echo "Starting Redis container for tests..."
+	@docker run -d --name redis-test -p 6379:6379 redis:latest > /dev/null
+	@echo "Running tests with Redis..."
+	@REDIS_TEST_ADDR=localhost:6379 $(GOTEST) -tags=redis $(PKGS) -v
+	@echo "Cleaning up Redis container..."
+	@docker stop redis-test > /dev/null && docker rm redis-test > /dev/null
+	@echo "Redis tests completed."
+
+# Run integration tests that require external services
+# These tests are skipped unless environment variables are set
+.PHONY: test-integration
+test-integration:
+	@echo "Running integration tests..."
+	@if [ -z "$(REDIS_TEST_ADDR)" ]; then \
+		echo "REDIS_TEST_ADDR not set, Redis tests will be skipped"; \
+	else \
+		echo "Using Redis at: $(REDIS_TEST_ADDR)"; \
+	fi
+	$(GOTEST) -tags=redis $(PKGS) -v
+
 # Run tests with a custom timeout
 .PHONY: test-timeout
 test-timeout:
@@ -146,6 +179,10 @@ help:
 	@echo "  build       - Build the application"
 	@echo "  clean       - Clean build artifacts"
 	@echo "  test        - Run all tests (excluding examples)"
+	@echo "  test-tag-redis - Run tests with Redis build tag"
+	@echo "  test-only-redis - Run only Redis tests"
+	@echo "  test-redis  - Run tests with Redis in Docker (automatically handles container setup/cleanup)"
+	@echo "  test-integration - Run tests for all external integrations (respects env vars)"
 	@echo "  test-timeout - Run tests with custom timeout (default: $(TIMEOUT))"
 	@echo "  test-pkg    - Run tests for specific package (usage: make test-pkg PKG=./pkg/llms)"
 	@echo "  create-test - Create test file for a Go file (usage: make create-test FILE=pkg/llms/ollama.go)"
