@@ -39,8 +39,11 @@ jobs:
       - name: Install Redis dependency
         run: go get github.com/redis/go-redis/v9
 
-      - name: Run integration tests (with Redis)
-        run: make test-integration
+      - name: Run standard tests
+        run: go test ./... -v
+      
+      - name: Run Redis tests
+        run: go test -tags=redis ./... -v
         env:
           REDIS_TEST_ADDR: localhost:6379
 
@@ -63,6 +66,9 @@ jobs:
 
       - name: Download dependencies
         run: go mod download
+        
+      - name: Install Redis dependency
+        run: go get github.com/redis/go-redis/v9
 
       - name: Run unit tests
-        run: make test
+        run: go test ./... -v

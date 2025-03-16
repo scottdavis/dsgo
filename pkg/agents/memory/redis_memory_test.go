@@ -1,8 +1,12 @@
+//go:build redis
+// +build redis
+
 package memory
 
 import (
 	"context"
 	"os"
+	"runtime"
 	"testing"
 	"time"
 
@@ -12,10 +16,11 @@ import (
 func TestRedisStore(t *testing.T) {
 	// Skip this test if not in CI or if REDIS_TEST_ADDR environment variable is not set
 	if os.Getenv("REDIS_TEST_ADDR") == "" {
-		if os.Getenv("CI") == "" {
-			t.Skip("Skipping Redis tests in local environment. Set REDIS_TEST_ADDR to run.")
+		// On CI, only require Redis for Linux platforms
+		if os.Getenv("CI") != "" && runtime.GOOS == "linux" {
+			t.Fatal("REDIS_TEST_ADDR environment variable must be set in Linux CI environment")
 		} else {
-			t.Fatal("REDIS_TEST_ADDR environment variable must be set in CI environment")
+			t.Skip("Skipping Redis tests. Set REDIS_TEST_ADDR to run.")
 		}
 	}
 
@@ -38,9 +43,14 @@ func TestRedisStore(t *testing.T) {
 
 // TestRedisStoreReconnection tests that Redis can handle reconnection
 func TestRedisStoreReconnection(t *testing.T) {
-	// Skip this test if not in CI or if REDIS_TEST_ADDR environment variable is not set
+	// Skip this test if REDIS_TEST_ADDR environment variable is not set
 	if os.Getenv("REDIS_TEST_ADDR") == "" {
-		t.Skip("Skipping Redis reconnection test. Set REDIS_TEST_ADDR to run.")
+		// On CI, only require Redis for Linux platforms
+		if os.Getenv("CI") != "" && runtime.GOOS == "linux" {
+			t.Skip("Skipping Redis reconnection test in non-Linux CI environment")
+		} else {
+			t.Skip("Skipping Redis reconnection test. Set REDIS_TEST_ADDR to run.")
+		}
 	}
 
 	// Get Redis connection details from environment
@@ -81,9 +91,14 @@ func TestRedisStoreReconnection(t *testing.T) {
 
 // TestRedisAutoExpiration tests that Redis automatically expires keys
 func TestRedisAutoExpiration(t *testing.T) {
-	// Skip this test if not in CI or if REDIS_TEST_ADDR environment variable is not set
+	// Skip this test if REDIS_TEST_ADDR environment variable is not set
 	if os.Getenv("REDIS_TEST_ADDR") == "" {
-		t.Skip("Skipping Redis expiration test. Set REDIS_TEST_ADDR to run.")
+		// On CI, only require Redis for Linux platforms
+		if os.Getenv("CI") != "" && runtime.GOOS == "linux" {
+			t.Skip("Skipping Redis auto-expiration test in non-Linux CI environment")
+		} else {
+			t.Skip("Skipping Redis expiration test. Set REDIS_TEST_ADDR to run.")
+		}
 	}
 
 	// Get Redis connection details from environment
