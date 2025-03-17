@@ -42,31 +42,7 @@ func (w *ParallelWorkflow) Execute(ctx context.Context, inputs map[string]any) (
 	var wg sync.WaitGroup
 	for _, step := range w.steps {
 		wg.Add(1)
-		go func(s *Step) {
-			defer wg.Done()
-
-			// Acquire semaphore
-			sem <- struct{}{}
-			defer func() { <-sem }()
-
-			// Prepare inputs for this step
-			stepInputs := make(map[string]any)
-			signature := step.Module.GetSignature()
-
-			for _, field := range signature.Inputs {
-				if val, ok := inputs[field.Name]; ok {
-					stepInputs[field.Name] = val
-				}
-			}
-
-			// Execute step
-			result, err := s.Execute(ctx, stepInputs)
-			if err != nil {
-				errors <- fmt.Errorf("step %s failed: %w", s.ID, err)
-				return
-			}
-			results <- result
-		}(step)
+		go doStep(ctx, &wg, sem, step, inputs, errors, results)
 	}
 
 	// Wait for all steps to complete
@@ -93,4 +69,31 @@ func (w *ParallelWorkflow) Execute(ctx context.Context, inputs map[string]any) (
 	}
 
 	return state, nil
+}
+
+func doStep(ctx context.Context, wg *sync.WaitGroup, sem chan struct{}, step *Step, inputs map[string]any, errors chan error, results chan *StepResult) {
+	defer wg.Done()
+
+	// Acquire semaphore
+	sem <- struct{}{}
+	defer func() { <-sem }()
+
+	// Prepare inputs for this step
+	stepInputs := make(map[string]any)
+	signature := step.Module.GetSignature()
+
+	for _, field := range signature.Inputs {
+		if val, ok := inputs[field.Name]; ok {
+			stepInputs[field.Name] = val
+		}
+	}
+
+	// Execute step
+	result, err := step.Execute(ctx, stepInputs)
+	if err != nil {
+		errors <- fmt.Errorf("step %s failed: %w", step.ID, err)
+		return
+	}
+	results <- result
+
 }
