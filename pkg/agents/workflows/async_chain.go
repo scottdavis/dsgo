@@ -27,6 +27,21 @@ type AsyncChainConfig struct {
 	
 	// CompletionTimeout is the maximum time to wait for job completion
 	CompletionTimeout time.Duration
+	
+	// HeartbeatInterval is how often to update the workflow heartbeat
+	HeartbeatInterval time.Duration
+	
+	// ErrorPolicy defines how to handle errors in workflow steps
+	DefaultErrorPolicy ErrorPolicy
+	
+	// EnableRetries enables automatic retries for failed steps
+	EnableRetries bool
+	
+	// MaxRetryAttempts is the maximum number of retry attempts
+	MaxRetryAttempts int
+	
+	// RetryBackoff is the base backoff duration for retries (grows exponentially)
+	RetryBackoff time.Duration
 }
 
 // AsyncChainWorkflow executes steps asynchronously by pushing them to a job queue
@@ -41,6 +56,22 @@ type AsyncChainWorkflow struct {
 func NewAsyncChainWorkflow(memory agents.Memory, config *AsyncChainConfig) *AsyncChainWorkflow {
 	if config.JobPrefix == "" {
 		config.JobPrefix = "async_job"
+	}
+	
+	if config.HeartbeatInterval == 0 {
+		config.HeartbeatInterval = 30 * time.Second
+	}
+	
+	if config.DefaultErrorPolicy == "" {
+		config.DefaultErrorPolicy = ErrorPolicyRetry
+	}
+	
+	if config.EnableRetries && config.MaxRetryAttempts == 0 {
+		config.MaxRetryAttempts = 3
+	}
+	
+	if config.RetryBackoff == 0 {
+		config.RetryBackoff = 5 * time.Second
 	}
 	
 	return &AsyncChainWorkflow{
@@ -58,30 +89,40 @@ func (w *AsyncChainWorkflow) Execute(ctx context.Context, inputs map[string]any)
 	// Create a workflow ID
 	workflowID := uuid.New().String()
 	
+	// Create workflow state tracking object
+	workflowState := NewWorkflowState(workflowID, len(w.steps), state)
+	
 	// Add memory to context for modules to access
 	ctx = w.ExecuteWithContext(ctx)
 	
-	// Store initial state in memory
+	// Get memory store
 	memStore, err := memory.GetMemoryStore(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("memory store not found in context")
 	}
 	
+	// Store workflow state
 	stateKey := fmt.Sprintf("wf:%s:state", workflowID)
-	if err := memStore.Store(stateKey, state, agents.WithTTL(24*time.Hour)); err != nil {
-		return nil, fmt.Errorf("failed to store initial state: %w", err)
+	stateStr, err := workflowState.Serialize()
+	if err != nil {
+		return nil, fmt.Errorf("failed to serialize workflow state: %w", err)
 	}
 	
-	// Create completion tracking
-	completionKey := fmt.Sprintf("wf:%s:completed", workflowID)
-	stepsCompletedKey := fmt.Sprintf("wf:%s:steps_completed", workflowID)
-	
-	if err := memStore.Store(completionKey, false, agents.WithTTL(24*time.Hour)); err != nil {
-		return nil, fmt.Errorf("failed to set completion flag: %w", err)
+	if err := memStore.Store(stateKey, stateStr, agents.WithTTL(24*time.Hour)); err != nil {
+		return nil, fmt.Errorf("failed to store workflow state: %w", err)
 	}
 	
-	if err := memStore.Store(stepsCompletedKey, 0, agents.WithTTL(24*time.Hour)); err != nil {
-		return nil, fmt.Errorf("failed to set steps completed counter: %w", err)
+	// Mark workflow as running
+	workflowState.MarkRunning()
+	
+	// Update stored state
+	stateStr, err = workflowState.Serialize()
+	if err != nil {
+		return nil, fmt.Errorf("failed to serialize updated workflow state: %w", err)
+	}
+	
+	if err := memStore.Store(stateKey, stateStr, agents.WithTTL(24*time.Hour)); err != nil {
+		return nil, fmt.Errorf("failed to store updated workflow state: %w", err)
 	}
 	
 	// Enqueue the first step
@@ -97,18 +138,38 @@ func (w *AsyncChainWorkflow) Execute(ctx context.Context, inputs map[string]any)
 			"workflow_id": workflowID,
 		})
 		
+		// Set first step as current
+		workflowState.CurrentStepID = firstStep.ID
+		
+		// Update state before pushing job
+		stateStr, _ = workflowState.Serialize()
+		_ = memStore.Store(stateKey, stateStr, agents.WithTTL(24*time.Hour))
+		
 		// Create job payload
 		jobPayload := map[string]any{
 			"workflow_id":     workflowID,
+			"step_id":         firstStep.ID,
 			"step_index":      0,
 			"total_steps":     len(w.steps),
 			"next_step_index": 1,
-			"state":           state,
+			"state":           workflowState.Data,
+			"retry_policy":    string(w.config.DefaultErrorPolicy),
+			"retry_count":     0,
+			"max_retries":     w.config.MaxRetryAttempts,
 		}
 		
 		// Enqueue the job
 		if err := w.config.JobQueue.Push(stepCtx, jobID, firstStep.ID, jobPayload); err != nil {
 			core.EndSpan(stepCtx)
+			
+			// Mark workflow as failed
+			workflowState.MarkFailed()
+			workflowState.AddFailedStep(firstStep.ID, err, ErrorSeverityWorkflowFatal, ErrorPolicyFail)
+			
+			// Store updated state
+			stateStr, _ := workflowState.Serialize()
+			_ = memStore.Store(stateKey, stateStr, agents.WithTTL(24*time.Hour))
+			
 			return nil, errors.WithFields(
 				errors.Wrap(err, errors.LLMGenerationFailed, "failed to enqueue job"),
 				errors.Fields{
@@ -124,7 +185,7 @@ func (w *AsyncChainWorkflow) Execute(ctx context.Context, inputs map[string]any)
 	if !w.config.WaitForCompletion {
 		return map[string]any{
 			"workflow_id": workflowID,
-			"status":      "enqueued",
+			"status":      string(workflowState.Status),
 			"steps_total": len(w.steps),
 		}, nil
 	}
@@ -138,54 +199,134 @@ func (w *AsyncChainWorkflow) Execute(ctx context.Context, inputs map[string]any)
 	timeoutCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	
-	ticker := time.NewTicker(500 * time.Millisecond)
-	defer ticker.Stop()
+	// Start heartbeat goroutine
+	heartbeatDone := make(chan struct{})
+	if w.config.HeartbeatInterval > 0 {
+		go func() {
+			defer close(heartbeatDone)
+			ticker := time.NewTicker(w.config.HeartbeatInterval)
+			defer ticker.Stop()
+			
+			for {
+				select {
+				case <-timeoutCtx.Done():
+					return
+				case <-ticker.C:
+					// Retrieve current state
+					stateValue, err := memStore.Retrieve(stateKey)
+					if err != nil {
+						continue
+					}
+					
+					// Update heartbeat
+					stateStr, ok := stateValue.(string)
+					if !ok {
+						continue
+					}
+					
+					state, err := DeserializeWorkflowState(stateStr)
+					if err != nil {
+						continue
+					}
+					
+					if state.Status == WorkflowStatusRunning {
+						state.UpdateHeartbeat()
+						updatedStateStr, _ := state.Serialize()
+						_ = memStore.Store(stateKey, updatedStateStr, agents.WithTTL(24*time.Hour))
+					} else {
+						// Workflow is no longer running, stop heartbeat
+						return
+					}
+				}
+			}
+		}()
+	}
+	
+	// Check completion status
+	completionTicker := time.NewTicker(500 * time.Millisecond)
+	defer completionTicker.Stop()
 	
 	for {
 		select {
 		case <-timeoutCtx.Done():
+			// Timeout occurred, mark workflow as stalled
+			stateValue, err := memStore.Retrieve(stateKey)
+			if err == nil {
+				if stateStr, ok := stateValue.(string); ok {
+					if state, err := DeserializeWorkflowState(stateStr); err == nil {
+						state.MarkStalled()
+						updatedStateStr, _ := state.Serialize()
+						_ = memStore.Store(stateKey, updatedStateStr, agents.WithTTL(24*time.Hour))
+					}
+				}
+			}
+			
 			return nil, fmt.Errorf("workflow execution timed out after %v", timeout)
 			
-		case <-ticker.C:
-			// Check completion status
-			completedVal, err := memStore.Retrieve(completionKey)
+		case <-completionTicker.C:
+			// Check current workflow state
+			stateValue, err := memStore.Retrieve(stateKey)
 			if err != nil {
-				return nil, fmt.Errorf("failed to check completion status: %w", err)
+				return nil, fmt.Errorf("failed to retrieve workflow state: %w", err)
 			}
 			
-			completed, ok := completedVal.(bool)
-			if !ok {
-				return nil, fmt.Errorf("invalid completion status type in memory: got %T", completedVal)
+			// Convert to JSON string if needed
+			var stateStr string
+			switch v := stateValue.(type) {
+			case string:
+				stateStr = v
+			case []byte:
+				stateStr = string(v)
+			default:
+				return nil, fmt.Errorf("invalid workflow state type: %T", stateValue)
 			}
 			
-			if completed {
-				// Retrieve final state
-				finalStateVal, err := memStore.Retrieve(stateKey)
-				if err != nil {
-					return nil, fmt.Errorf("failed to get final state: %w", err)
+			// Deserialize the workflow state
+			workflowState, err := DeserializeWorkflowState(stateStr)
+			if err != nil {
+				return nil, fmt.Errorf("failed to deserialize workflow state: %w", err)
+			}
+			
+			// Check if workflow has failed
+			if workflowState.Status == WorkflowStatusFailed || workflowState.HasFatalErrors() {
+				// Stop heartbeat goroutine
+				cancel()
+				<-heartbeatDone
+				
+				// Return error information
+				if len(workflowState.Errors) > 0 {
+					return map[string]any{
+						"workflow_id": workflowID,
+						"status":      string(workflowState.Status),
+						"error":       workflowState.Errors[0].Error,
+						"step_id":     workflowState.Errors[0].StepID,
+					}, fmt.Errorf("workflow failed: %s", workflowState.Errors[0].Error)
 				}
 				
-				// Handle state type conversion
-				var finalState map[string]any
+				return map[string]any{
+					"workflow_id": workflowID,
+					"status":      string(workflowState.Status),
+				}, fmt.Errorf("workflow failed")
+			}
+			
+			// Check if workflow is complete
+			if workflowState.Status == WorkflowStatusCompleted || 
+				workflowState.IsComplete() || 
+				len(workflowState.CompletedStepIDs) >= workflowState.TotalSteps {
 				
-				// Try to directly cast to the expected type
-				if typedMap, ok := finalStateVal.(map[string]any); ok {
-					finalState = typedMap
-				} else if intMap, ok := finalStateVal.(map[string]int); ok {
-					// Convert map[string]int to map[string]any
-					finalState = make(map[string]any, len(intMap))
-					for k, v := range intMap {
-						finalState[k] = v
-					}
-				} else {
-					// As a fallback, try a type assertion with reflection
-					// This is needed because the JSON unmarshaling in Redis store 
-					// might return map[string]interface{} which is interchangeable with map[string]any
-					// in some contexts but not in type assertions
-					return nil, fmt.Errorf("invalid state type in memory: %T", finalStateVal)
+				// Stop heartbeat goroutine
+				cancel()
+				<-heartbeatDone
+				
+				// If not already marked as completed, do so now
+				if workflowState.Status != WorkflowStatusCompleted {
+					workflowState.MarkCompleted()
+					updatedStateStr, _ := workflowState.Serialize()
+					_ = memStore.Store(stateKey, updatedStateStr, agents.WithTTL(24*time.Hour))
 				}
 				
-				return finalState, nil
+				// Return final state data
+				return workflowState.Data, nil
 			}
 		}
 	}

@@ -444,6 +444,32 @@ func main() {
 	// Create DSPYConfig with the LLM
 	dspyConfig := core.NewDSPYConfig().WithDefaultLLM(llm)
 
+	// Check command line args for specific examples to run
+	if len(os.Args) > 1 {
+		exampleName := os.Args[1]
+		switch exampleName {
+		case "resilient":
+			// Run the resilient workflow example
+			RunResilientWorkflowExample()
+			return
+		case "chain":
+			RunChainExample(ctx, logger, dspyConfig)
+			return
+		case "parallel":
+			RunParallelExample(ctx, logger, dspyConfig)
+			return
+		case "router":
+			RunRouteExample(ctx, logger, dspyConfig)
+			return
+		case "optimizer":
+			RunEvalutorOptimizerExample(ctx, logger, dspyConfig)
+			return
+		case "agent":
+			RunOrchestratorExample(ctx, logger, dspyConfig)
+			return
+		}
+	}
+
 	// Pass the config to all example functions
 	RunChainExample(ctx, logger, dspyConfig)
 	RunParallelExample(ctx, logger, dspyConfig)

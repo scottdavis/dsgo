@@ -242,6 +242,13 @@ test-redis-queue:
 test-queues: test-redis-queue test-faktory-queue
 	@echo "All queue tests completed successfully."
 
+.PHONY: test-distributed-worker
+test-distributed-worker:
+	go test -count=1 -v -tags=distribworker ./pkg/agents/workflows
+
+.PHONY: test-all
+test-all: test test-redis-queue test-faktory-queue test-distributed-worker
+
 .PHONY: help
 help:
 	@echo "Make targets:"
@@ -275,4 +282,6 @@ help:
 	@echo "  test-async-workflow - Run AsyncChainWorkflow tests with Redis"
 	@echo "  test-faktory-queue - Run Faktory queue tests"
 	@echo "  test-redis-queue - Run Redis queue tests"
-	@echo "  test-queues - Run all queue tests" 
+	@echo "  test-queues - Run all queue tests"
+	@echo "  test-distributed-worker - Run distributed worker tests"
+	@echo "  test-all - Run all tests" 

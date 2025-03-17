@@ -79,6 +79,23 @@ func (q *FaktoryQueue) Push(ctx context.Context, jobID string, stepID string, pa
 	return nil
 }
 
+// Pop retrieves the next job from the Faktory queue
+// Note: Faktory doesn't support direct job fetch via client API, 
+// this is typically done by the worker process
+func (q *FaktoryQueue) Pop(ctx context.Context) (*Job, error) {
+	return nil, fmt.Errorf("Pop not supported by Faktory client API directly, use Faktory worker instead")
+}
+
+// Ping verifies connectivity to the Faktory server
+func (q *FaktoryQueue) Ping() error {
+	// Faktory client doesn't have a direct ping method, so we use Info instead
+	_, err := q.client.Info()
+	if err != nil {
+		return fmt.Errorf("failed to ping Faktory server: %w", err)
+	}
+	return nil
+}
+
 // Close releases Faktory connection
 func (q *FaktoryQueue) Close() error {
 	return q.client.Close()
