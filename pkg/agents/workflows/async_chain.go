@@ -275,6 +275,16 @@ func (w *AsyncChainWorkflow) Execute(ctx context.Context, inputs map[string]any)
 				stateStr = v
 			case []byte:
 				stateStr = string(v)
+			case map[string]interface{}:
+				// If the stored value is already a map, handle it as final state data
+				return v, nil
+			case map[string]int:
+				// Convert map[string]int to map[string]interface{}
+				result := make(map[string]interface{})
+				for k, val := range v {
+					result[k] = val
+				}
+				return result, nil
 			default:
 				return nil, fmt.Errorf("invalid workflow state type: %T", stateValue)
 			}

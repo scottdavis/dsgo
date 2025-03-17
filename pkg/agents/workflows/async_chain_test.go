@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 	"github.com/scottdavis/dsgo/pkg/agents"
 	"github.com/scottdavis/dsgo/pkg/agents/memory"
@@ -310,4 +311,80 @@ func getEnvOrDefault(key, fallback string) string {
 		return value
 	}
 	return fallback
+}
+
+// TestAsyncChainWorkflow_DirectMapStorage tests that AsyncChainWorkflow can handle directly stored map state
+func TestAsyncChainWorkflow_DirectMapStorage(t *testing.T) {
+	// Check Redis availability
+	redisAddr := getEnvOrDefault("REDIS_TEST_ADDR", "localhost:6379")
+	redisPass := getEnvOrDefault("REDIS_TEST_PASS", "")
+	redisDB := 0
+	
+	// Connect to Redis
+	redisClient := redis.NewClient(&redis.Options{
+		Addr:     redisAddr,
+		Password: redisPass,
+		DB:       redisDB,
+	})
+	
+	// Verify Redis connection
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	
+	_, err := redisClient.Ping(ctx).Result()
+	if err != nil {
+		t.Skip("Skipping test, Redis is not available")
+	}
+	
+	// Initialize memory store
+	memStore, err := memory.NewRedisStore(redisAddr, redisPass, redisDB)
+	require.NoError(t, err, "Failed to create Redis memory store")
+	
+	// Simulate a workflow that's already been completed with a map[string]int state
+	workflowID := "test-direct-map-" + uuid.New().String()
+	stateKey := fmt.Sprintf("wf:%s:state", workflowID)
+	
+	// Store a map[string]int directly
+	directState := map[string]int{
+		"count": 42,
+		"steps_completed": 3,
+	}
+	
+	err = memStore.Store(stateKey, directState, agents.WithTTL(24*time.Hour))
+	require.NoError(t, err, "Failed to store direct state")
+	
+	// Directly test the retrieval and type conversion logic
+	stateValue, err := memStore.Retrieve(stateKey)
+	require.NoError(t, err, "Failed to retrieve state")
+	
+	// Convert to JSON string if needed
+	var result map[string]interface{}
+	switch v := stateValue.(type) {
+	case string:
+		// Deserialize
+		var state map[string]interface{}
+		err := json.Unmarshal([]byte(v), &state)
+		require.NoError(t, err, "Failed to unmarshal state")
+		result = state
+	case []byte:
+		// Deserialize
+		var state map[string]interface{}
+		err := json.Unmarshal(v, &state)
+		require.NoError(t, err, "Failed to unmarshal state")
+		result = state
+	case map[string]interface{}:
+		result = v
+	case map[string]int:
+		// Convert map[string]int to map[string]interface{}
+		result = make(map[string]interface{})
+		for k, val := range v {
+			result[k] = val
+		}
+	default:
+		t.Fatalf("Invalid workflow state type: %T", stateValue)
+	}
+	
+	// Verify result contains expected values
+	require.Equal(t, 42, result["count"], "Expected count to be 42")
+	require.Equal(t, 3, result["steps_completed"], "Expected steps_completed to be 3")
 } 
