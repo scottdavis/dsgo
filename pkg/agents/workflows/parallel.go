@@ -3,6 +3,7 @@ package workflows
 import (
 	"context"
 	"fmt"
+	"maps"
 	"sync"
 
 	"github.com/scottdavis/dsgo/pkg/agents"
@@ -24,9 +25,7 @@ func NewParallelWorkflow(memory agents.Memory, maxConcurrent int) *ParallelWorkf
 
 func (w *ParallelWorkflow) Execute(ctx context.Context, inputs map[string]any) (map[string]any, error) {
 	state := make(map[string]any)
-	for k, v := range inputs {
-		state[k] = v
-	}
+	maps.Copy(state, inputs)
 
 	// Add memory to context for modules to access
 	ctx = w.ExecuteWithContext(ctx)

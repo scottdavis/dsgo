@@ -201,6 +201,47 @@ redis-stop:
 .PHONY: examples
 examples: redis-example
 
+# Run AsyncChainWorkflow tests with Redis
+.PHONY: test-async-workflow
+test-async-workflow:
+	@echo "Running AsyncChainWorkflow tests with Redis..."
+	@docker inspect redis-test >/dev/null 2>&1 || \
+	  docker run -d --name redis-test -p 6379:6379 redis:latest > /dev/null
+	@sleep 2
+	@REDIS_TEST_ADDR=localhost:6379 go test -tags=redis -v ./pkg/agents/workflows -run TestAsyncChainWorkflow_Redis
+	@echo "Cleaning up Redis container..."
+	@docker stop redis-test >/dev/null 2>&1 && docker rm redis-test >/dev/null 2>&1 || true
+	@echo "AsyncChainWorkflow tests completed."
+
+# Run Faktory queue tests
+.PHONY: test-faktory-queue
+test-faktory-queue:
+	@echo "Running Faktory queue tests..."
+	@docker inspect faktory-test >/dev/null 2>&1 || \
+	  docker run -d --name faktory-test -p 7419:7419 -p 7420:7420 contribsys/faktory:latest > /dev/null
+	@sleep 2
+	@FAKTORY_URL=localhost:7419 go test -tags=faktory -v ./pkg/agents/workflows -run TestFaktoryQueue
+	@echo "Cleaning up Faktory container..."
+	@docker stop faktory-test >/dev/null 2>&1 && docker rm faktory-test >/dev/null 2>&1 || true
+	@echo "Faktory queue tests completed."
+
+# Run Redis queue tests
+.PHONY: test-redis-queue
+test-redis-queue:
+	@echo "Running Redis queue tests..."
+	@docker inspect redis-test >/dev/null 2>&1 || \
+	  docker run -d --name redis-test -p 6379:6379 redis:latest > /dev/null
+	@sleep 2
+	@REDIS_TEST_ADDR=localhost:6379 go test -tags=redis -v ./pkg/agents/workflows -run TestRedisQueue
+	@echo "Cleaning up Redis container..."
+	@docker stop redis-test >/dev/null 2>&1 && docker rm redis-test >/dev/null 2>&1 || true
+	@echo "Redis queue tests completed."
+
+# Run all queue tests
+.PHONY: test-queues
+test-queues: test-redis-queue test-faktory-queue
+	@echo "All queue tests completed successfully."
+
 .PHONY: help
 help:
 	@echo "Make targets:"
@@ -230,4 +271,8 @@ help:
 	@echo "  run-redis-example - Run Redis agent example"
 	@echo "  redis-example - Run Redis agent example using Docker (starts container automatically)"
 	@echo "  redis-stop - Stop Redis example container"
-	@echo "  examples - Run all examples" 
+	@echo "  examples - Run all examples"
+	@echo "  test-async-workflow - Run AsyncChainWorkflow tests with Redis"
+	@echo "  test-faktory-queue - Run Faktory queue tests"
+	@echo "  test-redis-queue - Run Redis queue tests"
+	@echo "  test-queues - Run all queue tests" 
