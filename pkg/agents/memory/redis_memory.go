@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
+	"github.com/scottdavis/dsgo/pkg/agents"
 	"github.com/scottdavis/dsgo/pkg/errors"
 )
 
@@ -43,7 +44,13 @@ func NewRedisStore(addr, password string, db int) (*RedisStore, error) {
 }
 
 // Store implements the Memory interface Store method.
-func (r *RedisStore) Store(key string, value any) error {
+func (r *RedisStore) Store(key string, value any, opts ...agents.StoreOption) error {
+	// Process options
+	options := &agents.StoreOptions{}
+	for _, opt := range opts {
+		opt(options)
+	}
+
 	jsonValue, err := json.Marshal(value)
 	if err != nil {
 		return errors.WithFields(
@@ -56,11 +63,21 @@ func (r *RedisStore) Store(key string, value any) error {
 	}
 
 	ctx := context.Background()
-	if err := r.client.Set(ctx, key, jsonValue, 0).Err(); err != nil {
-		return errors.WithFields(
-			errors.Wrap(err, errors.Unknown, "failed to store value in Redis"),
-			errors.Fields{"key": key},
-		)
+	// Use TTL if provided in options
+	if options.TTL > 0 {
+		if err := r.client.Set(ctx, key, jsonValue, options.TTL).Err(); err != nil {
+			return errors.WithFields(
+				errors.Wrap(err, errors.Unknown, "failed to store value with TTL in Redis"),
+				errors.Fields{"key": key, "ttl": options.TTL},
+			)
+		}
+	} else {
+		if err := r.client.Set(ctx, key, jsonValue, 0).Err(); err != nil {
+			return errors.WithFields(
+				errors.Wrap(err, errors.Unknown, "failed to store value in Redis"),
+				errors.Fields{"key": key},
+			)
+		}
 	}
 
 	return nil

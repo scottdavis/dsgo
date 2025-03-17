@@ -9,8 +9,8 @@ import (
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
+	"github.com/scottdavis/dsgo/pkg/agents"
 	"github.com/scottdavis/dsgo/pkg/errors"
-	"github.com/scottdavis/dsgo/pkg/logging"
 )
 
 // SQLiteStore implements the Memory interface using SQLite as the backend.
@@ -93,11 +93,17 @@ func (s *SQLiteStore) ensureInitialized() error {
 }
 
 // Store implements the Memory interface Store method.
-func (s *SQLiteStore) Store(key string, value any) error {
+func (s *SQLiteStore) Store(key string, value any, opts ...agents.StoreOption) error {
 	if err := s.ensureInitialized(); err != nil {
 		return err
 	}
-	// Convert value to JSON outside of transaction
+
+	// Process options
+	options := &agents.StoreOptions{}
+	for _, opt := range opts {
+		opt(options)
+	}
+
 	jsonValue, err := json.Marshal(value)
 	if err != nil {
 		return errors.WithFields(
@@ -109,46 +115,59 @@ func (s *SQLiteStore) Store(key string, value any) error {
 		)
 	}
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	// Begin transaction
 	tx, err := s.db.Begin()
 	if err != nil {
-		return errors.WithFields(
-			errors.Wrap(err, errors.Unknown, "failed to begin transaction"),
-			errors.Fields{"key": key},
-		)
+		return errors.Wrap(err, errors.Unknown, "failed to begin transaction")
 	}
 	defer func() {
-		if err := tx.Rollback(); err != nil && err != sql.ErrTxDone {
-			logging.GetLogger().Error(context.Background(), "failed to rollback transaction: %v", err)
+		if err != nil {
+			_ = tx.Rollback()
 		}
 	}()
 
-	// Upsert the value
-	query := `
-    INSERT INTO memory_store (key, value, updated_at) 
-    VALUES (?, ?, CURRENT_TIMESTAMP)
-    ON CONFLICT(key) DO UPDATE SET 
-        value = excluded.value,
-        updated_at = CURRENT_TIMESTAMP
-    `
+	// Determine expiry time if TTL is set
+	var expiryTime *time.Time
+	if options.TTL > 0 {
+		t := time.Now().Add(options.TTL)
+		expiryTime = &t
+	}
 
-	_, err = tx.Exec(query, key, string(jsonValue))
+	// Delete existing key if it exists
+	_, err = tx.Exec("DELETE FROM memory_store WHERE key = ?", key)
 	if err != nil {
 		return errors.WithFields(
-			errors.Wrap(err, errors.Unknown, "failed to store value"),
+			errors.Wrap(err, errors.Unknown, "failed to delete existing key"),
+			errors.Fields{"key": key},
+		)
+	}
+
+	// Insert new key with JSON value
+	var stmt *sql.Stmt
+	if expiryTime != nil {
+		stmt, err = tx.Prepare("INSERT INTO memory_store (key, value, updated_at, expires_at) VALUES (?, ?, ?, ?)")
+		if err != nil {
+			return errors.Wrap(err, errors.Unknown, "failed to prepare insert statement")
+		}
+		_, err = stmt.Exec(key, string(jsonValue), time.Now().Format(time.RFC3339), expiryTime.Format(time.RFC3339))
+	} else {
+		stmt, err = tx.Prepare("INSERT INTO memory_store (key, value, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)")
+		if err != nil {
+			return errors.Wrap(err, errors.Unknown, "failed to prepare insert statement")
+		}
+		_, err = stmt.Exec(key, string(jsonValue))
+	}
+	
+	if err != nil {
+		return errors.WithFields(
+			errors.Wrap(err, errors.Unknown, "failed to store value in SQLite"),
 			errors.Fields{"key": key},
 		)
 	}
 
 	// Commit transaction
 	if err = tx.Commit(); err != nil {
-		return errors.WithFields(
-			errors.Wrap(err, errors.Unknown, "failed to commit transaction"),
-			errors.Fields{"key": key},
-		)
+		return errors.Wrap(err, errors.Unknown, "failed to commit transaction")
 	}
 
 	return nil
@@ -284,42 +303,6 @@ func (s *SQLiteStore) Close() error {
 	if err := s.db.Close(); err != nil {
 		return errors.Wrap(err, errors.Unknown, "failed to close database connection")
 	}
-	return nil
-}
-
-// StoreWithTTL stores a value with a time-to-live duration.
-func (s *SQLiteStore) StoreWithTTL(ctx context.Context, key string, value any, ttl time.Duration) error {
-	if err := s.ensureInitialized(); err != nil {
-		return err
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	jsonValue, err := json.Marshal(value)
-	if err != nil {
-		return errors.WithFields(
-			errors.Wrap(err, errors.InvalidInput, "failed to marshal value to JSON"),
-			errors.Fields{"key": key},
-		)
-	}
-
-	query := `
-    INSERT INTO memory_store (key, value, created_at, updated_at, expires_at) 
-    VALUES (?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?)
-    ON CONFLICT(key) DO UPDATE SET 
-        value = excluded.value,
-        updated_at = excluded.updated_at
-    `
-
-	expirationTime := time.Now().Add(ttl).UTC().Format(time.RFC3339)
-	_, err = s.db.ExecContext(ctx, query, key, string(jsonValue), expirationTime)
-	if err != nil {
-		return errors.WithFields(
-			errors.Wrap(err, errors.Unknown, "failed to store value with TTL"),
-			errors.Fields{"key": key, "ttl": ttl},
-		)
-	}
-
 	return nil
 }
 

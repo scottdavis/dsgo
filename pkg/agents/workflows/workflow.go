@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/scottdavis/dsgo/pkg/agents"
+	"github.com/scottdavis/dsgo/pkg/agents/memory"
 )
 
 // Workflow represents a sequence of steps that accomplish a task.
@@ -31,12 +32,18 @@ type BaseWorkflow struct {
 	memory agents.Memory
 }
 
-func NewBaseWorkflow(memory agents.Memory) *BaseWorkflow {
+func NewBaseWorkflow(mem agents.Memory) *BaseWorkflow {
 	return &BaseWorkflow{
 		steps:     make([]*Step, 0),
 		stepIndex: make(map[string]*Step),
-		memory:    memory,
+		memory:    mem,
 	}
+}
+
+// ExecuteWithContext prepares a context with memory store for execution
+func (w *BaseWorkflow) ExecuteWithContext(ctx context.Context) context.Context {
+	// Add memory to context for modules to access
+	return memory.WithMemoryStore(ctx, w.memory)
 }
 
 func (w *BaseWorkflow) AddStep(step *Step) error {
@@ -48,7 +55,6 @@ func (w *BaseWorkflow) AddStep(step *Step) error {
 	// Add step to workflow
 	w.steps = append(w.steps, step)
 	w.stepIndex[step.ID] = step
-
 	return nil
 }
 
@@ -58,37 +64,60 @@ func (w *BaseWorkflow) GetSteps() []*Step {
 
 // ValidateWorkflow checks if the workflow structure is valid.
 func (w *BaseWorkflow) ValidateWorkflow() error {
-	// Check for cycles in step dependencies
+	// Validate that all nextSteps references exist
+	for _, step := range w.steps {
+		for _, nextID := range step.NextSteps {
+			if _, exists := w.stepIndex[nextID]; !exists {
+				return fmt.Errorf("step %s references non-existent step %s", step.ID, nextID)
+			}
+		}
+	}
+
+	// Check for cycles in the workflow
 	visited := make(map[string]bool)
 	path := make(map[string]bool)
 
+	// Helper function for DFS cycle detection
 	var checkCycle func(stepID string) error
 	checkCycle = func(stepID string) error {
+		// If we've seen this node in the current path, we have a cycle
+		if path[stepID] {
+			return fmt.Errorf("cycle detected in workflow involving step %s", stepID)
+		}
+
+		// If we've already visited this node and found no cycles, skip it
+		if visited[stepID] {
+			return nil
+		}
+
+		// Mark as visited and add to current path
 		visited[stepID] = true
 		path[stepID] = true
 
+		// Check all next steps
 		step := w.stepIndex[stepID]
 		for _, nextID := range step.NextSteps {
-			if !visited[nextID] {
-				if err := checkCycle(nextID); err != nil {
-					return err
-				}
-			} else if path[nextID] {
-				return fmt.Errorf("cycle detected in workflow")
+			if err := checkCycle(nextID); err != nil {
+				return err
 			}
 		}
 
+		// Remove from current path as we backtrack
 		path[stepID] = false
 		return nil
 	}
 
+	// Start DFS from each step to find cycles
 	for _, step := range w.steps {
-		if !visited[step.ID] {
-			if err := checkCycle(step.ID); err != nil {
-				return err
-			}
+		if err := checkCycle(step.ID); err != nil {
+			return err
 		}
 	}
 
 	return nil
+}
+
+// GetMemory returns the memory associated with this workflow
+func (w *BaseWorkflow) GetMemory() agents.Memory {
+	return w.memory
 }

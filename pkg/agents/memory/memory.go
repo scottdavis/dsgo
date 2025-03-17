@@ -3,12 +3,31 @@ package memory
 import (
 	"context"
 	"time"
+
+	"github.com/scottdavis/dsgo/pkg/agents"
 )
+
+// StoreOption defines options for Store operations
+type StoreOption func(*StoreOptions)
+
+// StoreOptions contains configuration for Store operations
+type StoreOptions struct {
+	TTL time.Duration
+}
+
+// WithTTL creates an option to set a TTL for a stored value
+func WithTTL(ttl time.Duration) StoreOption {
+	return func(options *StoreOptions) {
+		options.TTL = ttl
+	}
+}
 
 // Memory defines the interface for key-value storage backends.
 type Memory interface {
 	// Store saves a value with the specified key.
-	Store(key string, value any) error
+	// Optional StoreOption parameters can be provided to configure the storage behavior,
+	// such as TTL (time-to-live).
+	Store(key string, value any, opts ...agents.StoreOption) error
 
 	// Retrieve gets a value by its key.
 	Retrieve(key string) (any, error)
@@ -18,9 +37,6 @@ type Memory interface {
 
 	// Clear removes all values from the store.
 	Clear() error
-
-	// StoreWithTTL stores a value with a specified time-to-live duration.
-	StoreWithTTL(ctx context.Context, key string, value any, ttl time.Duration) error
 
 	// CleanExpired removes all expired entries from the store.
 	CleanExpired(ctx context.Context) (int64, error)

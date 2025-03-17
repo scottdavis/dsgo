@@ -51,7 +51,7 @@ type MockMemory struct {
 	mock.Mock
 }
 
-func (m *MockMemory) Store(key string, value any) error {
+func (m *MockMemory) Store(key string, value any, opts ...StoreOption) error {
 	args := m.Called(key, value)
 	return args.Error(0)
 }
@@ -69,6 +69,16 @@ func (m *MockMemory) List() ([]string, error) {
 func (m *MockMemory) Clear() error {
 	args := m.Called()
 	return args.Error(0)
+}
+
+func (m *MockMemory) Close() error {
+	args := m.Called()
+	return args.Error(0)
+}
+
+func (m *MockMemory) CleanExpired(ctx context.Context) (int64, error) {
+	args := m.Called(ctx)
+	return args.Get(0).(int64), args.Error(1)
 }
 
 // testTaskParser is a simple implementation of TaskParser for testing.

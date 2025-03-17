@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/scottdavis/dsgo/pkg/agents"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -98,7 +99,7 @@ func MemoryTestSuite(t *testing.T, name string, store Memory) {
 		ctx := context.Background()
 		
 		// Store with short TTL
-		err = store.StoreWithTTL(ctx, "ttl-key", "ttl-value", 100*time.Millisecond)
+		err = store.Store("ttl-key", "ttl-value", agents.WithTTL(100*time.Millisecond))
 		require.NoError(t, err)
 		
 		// Verify it exists
@@ -118,7 +119,7 @@ func MemoryTestSuite(t *testing.T, name string, store Memory) {
 		assert.Error(t, err)
 		
 		// Store with longer TTL
-		err = store.StoreWithTTL(ctx, "ttl-key2", "ttl-value2", 1*time.Hour)
+		err = store.Store("ttl-key2", "ttl-value2", agents.WithTTL(1*time.Hour))
 		require.NoError(t, err)
 		
 		// Verify it exists

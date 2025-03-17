@@ -270,14 +270,6 @@ func (b *BaseLLM) GetHTTPClient() *http.Client {
 	return b.client
 }
 
-// DefaultLLM represents the default LLM to be used when none is specified.
-var DefaultLLM LLM
-
-// SetDefaultLLM sets the default LLM.
-func SetDefaultLLM(llm LLM) {
-	DefaultLLM = llm
-}
-
 // ModelID represents the available model IDs.
 type ModelID string
 

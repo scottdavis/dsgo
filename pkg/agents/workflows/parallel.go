@@ -28,6 +28,9 @@ func (w *ParallelWorkflow) Execute(ctx context.Context, inputs map[string]any) (
 		state[k] = v
 	}
 
+	// Add memory to context for modules to access
+	ctx = w.ExecuteWithContext(ctx)
+
 	// Create channel for collecting results
 	results := make(chan *StepResult, len(w.steps))
 	errors := make(chan error, len(w.steps))

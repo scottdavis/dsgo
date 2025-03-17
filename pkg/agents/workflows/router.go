@@ -46,6 +46,9 @@ func (w *RouterWorkflow) Execute(ctx context.Context, inputs map[string]any) (ma
 		state[k] = v
 	}
 
+	// Add memory to context for modules to access
+	ctx = w.ExecuteWithContext(ctx)
+
 	// Execute classifier step
 	result, err := w.classifierStep.Execute(ctx, inputs)
 	if err != nil {
