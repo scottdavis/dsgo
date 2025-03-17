@@ -55,11 +55,8 @@ func main() {
         log.Fatalf("Failed to configure LLM: %v", err)
     }
     
-    // Set as default LLM (optional)
-    llms.SetDefaultLLM(anthropicLLM)
-    
-    // Alternatively, you can create a DSPYConfig directly with the LLM
-    // dspyConfig := core.NewDSPYConfig().WithDefaultLLM(anthropicLLM)
+    // Create a DSPYConfig with the LLM (proper dependency injection)
+    dspyConfig := core.NewDSPYConfig().WithDefaultLLM(anthropicLLM)
 
     // Create a signature for question answering
     signature := core.NewSignature(
@@ -67,10 +64,7 @@ func main() {
         []core.OutputField{{Field: core.Field{Name: "answer"}}},
     )
 
-    // Create a DSPYConfig with the default LLM
-    dspyConfig := core.NewDSPYConfig().WithDefaultLLM(llms.GetDefaultLLM())
-
-    // Create a ChainOfThought module
+    // Create a ChainOfThought module with the config containing the LLM
     cot := modules.NewChainOfThought(signature, dspyConfig)
 
     // Create a program

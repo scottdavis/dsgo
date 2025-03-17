@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/scottdavis/dsgo/pkg/agents"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -184,7 +185,7 @@ func TestSQLiteStoreOperations(t *testing.T) {
 		ctx := context.Background()
 
 		// Store with short TTL
-		err := store.StoreWithTTL(ctx, "ttl_key", "ttl_value", 1*time.Second)
+		err := store.Store("ttl_key", "ttl_value", agents.WithTTL(1*time.Second))
 		require.NoError(t, err)
 
 		// Verify value exists

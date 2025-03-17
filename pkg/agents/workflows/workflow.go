@@ -72,6 +72,48 @@ func (w *BaseWorkflow) ValidateWorkflow() error {
 			}
 		}
 	}
+
+	// Check for cycles in the workflow
+	visited := make(map[string]bool)
+	path := make(map[string]bool)
+
+	// Helper function for DFS cycle detection
+	var checkCycle func(stepID string) error
+	checkCycle = func(stepID string) error {
+		// If we've seen this node in the current path, we have a cycle
+		if path[stepID] {
+			return fmt.Errorf("cycle detected in workflow involving step %s", stepID)
+		}
+
+		// If we've already visited this node and found no cycles, skip it
+		if visited[stepID] {
+			return nil
+		}
+
+		// Mark as visited and add to current path
+		visited[stepID] = true
+		path[stepID] = true
+
+		// Check all next steps
+		step := w.stepIndex[stepID]
+		for _, nextID := range step.NextSteps {
+			if err := checkCycle(nextID); err != nil {
+				return err
+			}
+		}
+
+		// Remove from current path as we backtrack
+		path[stepID] = false
+		return nil
+	}
+
+	// Start DFS from each step to find cycles
+	for _, step := range w.steps {
+		if err := checkCycle(step.ID); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
