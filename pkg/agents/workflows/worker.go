@@ -261,10 +261,8 @@ func (w *WorkflowWorker) processNextJob() {
 			jobErr = err
 		} else {
 			// Success! Update state with result
-			if result != nil {
-				for k, v := range result {
-					state[k] = v
-				}
+			for k, v := range result {
+				state[k] = v
 			}
 			
 			// If we have a next step, add it to the state

@@ -111,10 +111,8 @@ func NewWorkflowState(id string, totalSteps int, initialData map[string]interfac
 	
 	// Create a copy of the initial data to avoid sharing the map reference
 	stateCopy := make(map[string]interface{})
-	if initialData != nil {
-		for k, v := range initialData {
-			stateCopy[k] = v
-		}
+	for k, v := range initialData {
+		stateCopy[k] = v
 	}
 	
 	return &WorkflowState{

@@ -9,10 +9,20 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
 	"github.com/scottdavis/dsgo/pkg/agents"
 	"github.com/scottdavis/dsgo/pkg/agents/memory"
 	"github.com/scottdavis/dsgo/pkg/core"
 	"github.com/scottdavis/dsgo/pkg/errors"
+)
+
+// contextKey is a custom type for context keys to avoid collisions
+type contextKey string
+
+// Context keys for worker information
+const (
+	workerIDKey   contextKey = "worker_id"
+	workerNumKey  contextKey = "worker_num"
 )
 
 // DistributedWorkerConfig configures the distributed worker
@@ -285,8 +295,8 @@ func (w *DistributedWorker) processJobs(ctx context.Context, workerNum int) {
 			return
 		case job := <-w.jobCh:
 			// Process the job with middleware
-			jobCtx := context.WithValue(ctx, "worker_id", w.workerID)
-			jobCtx = context.WithValue(jobCtx, "worker_num", workerNum)
+			jobCtx := context.WithValue(ctx, workerIDKey, w.workerID)
+			jobCtx = context.WithValue(jobCtx, workerNumKey, workerNum)
 			
 			w.config.Logger.Info("Processing job", 
 				"job_id", job.ID, 

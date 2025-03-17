@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"maps"
-	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -49,7 +48,6 @@ type AsyncChainConfig struct {
 type AsyncChainWorkflow struct {
 	*BaseWorkflow
 	config *AsyncChainConfig
-	mutex  sync.Mutex
 }
 
 // NewAsyncChainWorkflow creates a new AsyncChainWorkflow

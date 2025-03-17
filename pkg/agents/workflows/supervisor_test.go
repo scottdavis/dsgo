@@ -279,7 +279,7 @@ func TestWorkflowSupervisor_DeadLetterQueue(t *testing.T) {
 	originalPush := failingQueue.Push
 	failQueuePush := func(ctx context.Context, jobID, stepID string, payload map[string]any) error {
 		// Still record the call via the original method
-		originalPush(ctx, jobID, stepID, payload)
+		_ = originalPush(ctx, jobID, stepID, payload)
 		// But return an error
 		return fmt.Errorf("queue push failed")
 	}
