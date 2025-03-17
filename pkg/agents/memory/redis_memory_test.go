@@ -28,7 +28,7 @@ func TestRedisStore(t *testing.T) {
 	// Get Redis connection details from environment
 	redisAddr := os.Getenv("REDIS_TEST_ADDR")
 	redisPassword := os.Getenv("REDIS_TEST_PASSWORD") // Can be empty
-	
+
 	// Create a new store
 	store, err := NewRedisStore(redisAddr, redisPassword, 0)
 	require.NoError(t, err)
@@ -57,7 +57,7 @@ func TestRedisStoreReconnection(t *testing.T) {
 	// Get Redis connection details from environment
 	redisAddr := os.Getenv("REDIS_TEST_ADDR")
 	redisPassword := os.Getenv("REDIS_TEST_PASSWORD") // Can be empty
-	
+
 	// Create a new store
 	store, err := NewRedisStore(redisAddr, redisPassword, 0)
 	require.NoError(t, err)
@@ -105,7 +105,7 @@ func TestRedisAutoExpiration(t *testing.T) {
 	// Get Redis connection details from environment
 	redisAddr := os.Getenv("REDIS_TEST_ADDR")
 	redisPassword := os.Getenv("REDIS_TEST_PASSWORD") // Can be empty
-	
+
 	// Create a new store
 	store, err := NewRedisStore(redisAddr, redisPassword, 0)
 	require.NoError(t, err)
@@ -116,25 +116,25 @@ func TestRedisAutoExpiration(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx := context.Background()
-	
+
 	// Store with very short TTL (100ms) using the WithTTL option
 	err = store.Store("expire-key", "expire-value", agents.WithTTL(100*time.Millisecond))
 	require.NoError(t, err)
-	
+
 	// Verify value exists
 	val, err := store.Retrieve("expire-key")
 	require.NoError(t, err)
 	require.Equal(t, "expire-value", val)
-	
+
 	// Wait for expiration
 	time.Sleep(200 * time.Millisecond)
-	
+
 	// Value should be gone (auto-expired by Redis)
 	_, err = store.Retrieve("expire-key")
 	require.Error(t, err, "Key should be automatically expired")
-	
+
 	// CleanExpired should be a no-op with no error
 	count, err := store.CleanExpired(ctx)
 	require.NoError(t, err)
 	require.Equal(t, int64(0), count)
-} 
+}

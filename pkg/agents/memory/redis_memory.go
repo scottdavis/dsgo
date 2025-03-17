@@ -30,7 +30,7 @@ func NewRedisStore(addr, password string, db int) (*RedisStore, error) {
 	// Verify connection
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	
+
 	if err := client.Ping(ctx).Err(); err != nil {
 		return nil, errors.WithFields(
 			errors.Wrap(err, errors.Unknown, "failed to connect to Redis"),
@@ -204,4 +204,4 @@ func (r *RedisStore) Close() error {
 		return errors.Wrap(err, errors.Unknown, "failed to close Redis connection")
 	}
 	return nil
-} 
+}

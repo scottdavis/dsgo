@@ -307,4 +307,4 @@ func main() {
 
 	// Run the example
 	RunRedisAgentExample(ctx, logger, dspyConfig, redisConfig)
-} 
+}

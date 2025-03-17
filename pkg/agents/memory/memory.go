@@ -43,4 +43,4 @@ type Memory interface {
 
 	// Close releases resources used by the memory store.
 	Close() error
-} 
+}

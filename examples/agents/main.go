@@ -450,7 +450,7 @@ func main() {
 	RunRouteExample(ctx, logger, dspyConfig)
 	RunEvalutorOptimizerExample(ctx, logger, dspyConfig)
 	RunOrchestratorExample(ctx, logger, dspyConfig)
-	
+
 	// Uncomment to run the Redis example (requires Redis server)
 	// Needs a Redis server running, e.g., docker run -d --name redis-test -p 6379:6379 redis:latest
 	// redisConfig := RedisConfig{
@@ -459,7 +459,7 @@ func main() {
 	//    DB:       0,
 	// }
 	// RunRedisAgentExample(ctx, logger, dspyConfig, redisConfig)
-	
+
 	// Uncomment to run the simplified Redis example
 	// Requires Redis server: docker run -d --name redis-test -p 6379:6379 redis:latest
 	// RunSimpleRedisExample()

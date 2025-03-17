@@ -46,9 +46,9 @@ type Memory interface {
 
 // Simple in-memory implementation.
 type InMemoryStore struct {
-	data     map[string]any
-	expiry   map[string]time.Time
-	mu       sync.RWMutex
+	data   map[string]any
+	expiry map[string]time.Time
+	mu     sync.RWMutex
 }
 
 func NewInMemoryStore() *InMemoryStore {
@@ -61,15 +61,15 @@ func NewInMemoryStore() *InMemoryStore {
 func (s *InMemoryStore) Store(key string, value any, opts ...StoreOption) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	
+
 	// Process options
 	options := &StoreOptions{}
 	for _, opt := range opts {
 		opt(options)
 	}
-	
+
 	s.data[key] = value
-	
+
 	// Set expiry if TTL is specified
 	if options.TTL > 0 {
 		s.expiry[key] = time.Now().Add(options.TTL)
@@ -77,7 +77,7 @@ func (s *InMemoryStore) Store(key string, value any, opts ...StoreOption) error 
 		// Remove any existing expiry for this key
 		delete(s.expiry, key)
 	}
-	
+
 	return nil
 }
 
@@ -94,7 +94,7 @@ func (s *InMemoryStore) Retrieve(key string) (any, error) {
 		delete(s.expiry, key)
 		s.mu.Unlock()
 		s.mu.RLock()
-		
+
 		return nil, errors.WithFields(
 			errors.New(errors.ResourceNotFound, "key expired in memory store"),
 			errors.Fields{
@@ -145,7 +145,7 @@ func (s *InMemoryStore) Clear() error {
 func (s *InMemoryStore) CleanExpired(ctx context.Context) (int64, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	
+
 	return s.cleanExpiredNoLock(), nil
 }
 
@@ -154,7 +154,7 @@ func (s *InMemoryStore) CleanExpired(ctx context.Context) (int64, error) {
 func (s *InMemoryStore) cleanExpiredNoLock() int64 {
 	var count int64
 	now := time.Now()
-	
+
 	for key, expiry := range s.expiry {
 		if now.After(expiry) {
 			delete(s.data, key)
@@ -162,7 +162,7 @@ func (s *InMemoryStore) cleanExpiredNoLock() int64 {
 			count++
 		}
 	}
-	
+
 	return count
 }
 

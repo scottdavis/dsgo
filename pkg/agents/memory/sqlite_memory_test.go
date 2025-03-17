@@ -29,10 +29,10 @@ func TestSQLiteStore(t *testing.T) {
 	t.Run("FileBasedDB", func(t *testing.T) {
 		tempFile, err := os.CreateTemp("", "sqlite-test-*.db")
 		require.NoError(t, err)
-		
+
 		dbPath := tempFile.Name()
 		tempFile.Close()
-		
+
 		// Clean up the temp file when done
 		defer os.Remove(dbPath)
 

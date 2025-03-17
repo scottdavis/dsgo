@@ -36,7 +36,7 @@ func main() {
 
 	// Create basic context for LLM initialization
 	basicCtx := context.Background()
-	
+
 	// Initialize LLM
 	// Create an Ollama config specifically for llama3
 	ollamaConfig := llms.NewOllamaConfig("http://localhost:11434", "llama3")
@@ -80,28 +80,28 @@ func main() {
 
 	// Step 2: Setting up NLP workflow with Redis memory
 	logger.Info(ctx, "\n=== Step 2: Setting up NLP workflow with Redis memory ===")
-	
+
 	// Create a workflow with Redis store for shared memory
 	workflow := workflows.NewChainWorkflow(store)
-	
+
 	// Add a content processing step that summarizes the text
 	summaryStep := createSummaryStep(llm)
 	if err := workflow.AddStep(summaryStep); err != nil {
 		logger.Error(ctx, "Failed to add summary step: %v", err)
 		os.Exit(1)
 	}
-	
+
 	// Add a translation step that translates the summary to Spanish
 	translationStep := createTranslationStep(llm)
 	if err := workflow.AddStep(translationStep); err != nil {
 		logger.Error(ctx, "Failed to add translation step: %v", err)
 		os.Exit(1)
 	}
-	
+
 	// Execute the workflow
 	logger.Info(ctx, "Executing workflow...")
 	result, err := workflow.Execute(ctx, map[string]any{
-		"content": content,  // Pass downloaded content directly to the workflow
+		"content": content, // Pass downloaded content directly to the workflow
 	})
 	if err != nil {
 		logger.Error(ctx, "Failed to execute workflow: %v", err)
@@ -114,7 +114,7 @@ func main() {
 	logger.Info(ctx, "%s", result["summary"])
 	logger.Info(ctx, "\nSpanish Translation:")
 	logger.Info(ctx, "%s", result["translation"])
-	
+
 	// Get all keys in Redis to show what was stored during workflow
 	keys, err := store.List()
 	if err != nil {
@@ -128,17 +128,17 @@ func main() {
 
 	// Step 4: Demonstrate TTL functionality
 	logger.Info(ctx, "\n=== Step 3: Demonstrating TTL functionality ===")
-	
+
 	// Generate a unique key with workflow and step ID
 	tempKey := fmt.Sprintf("workflow:temp:%s", time.Now().Format(time.RFC3339))
-	
+
 	// Store the summary with TTL
 	summary, ok := result["summary"].(string)
 	if !ok {
 		logger.Error(ctx, "Failed to convert summary to string")
 		os.Exit(1)
 	}
-	
+
 	// Note that users don't need to worry about the key - the WithTTL option is what matters
 	err = store.Store(tempKey, summary, agents.WithTTL(5*time.Second))
 	if err != nil {
@@ -146,7 +146,7 @@ func main() {
 		os.Exit(1)
 	}
 	logger.Info(ctx, "Stored summary with 5-second TTL")
-	
+
 	// Verify content is stored - users don't need to know the key
 	_, err = store.Retrieve(tempKey)
 	if err != nil {
@@ -154,11 +154,11 @@ func main() {
 		os.Exit(1)
 	}
 	logger.Info(ctx, "Temporary data is available in the store")
-	
+
 	// Wait for TTL to expire
 	logger.Info(ctx, "Waiting for 6 seconds for TTL to expire...")
 	time.Sleep(6 * time.Second)
-	
+
 	// Try to retrieve expired content - again, in a real workflow users wouldn't
 	// need to worry about this specific key
 	_, err = store.Retrieve(tempKey)
@@ -176,7 +176,7 @@ func main() {
 		os.Exit(1)
 	}
 	logger.Info(ctx, "Successfully cleared Redis store")
-	
+
 	logger.Info(ctx, "\nDSP-GO Redis Workflow example completed successfully")
 	logger.Info(ctx, "===============================================")
 }
@@ -187,25 +187,25 @@ func downloadURL(url string) (string, error) {
 	client := &http.Client{
 		Timeout: 10 * time.Second,
 	}
-	
+
 	// Make the request
 	resp, err := client.Get(url)
 	if err != nil {
 		return "", fmt.Errorf("failed to GET URL: %w", err)
 	}
 	defer resp.Body.Close()
-	
+
 	// Check if the response was successful
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("HTTP request failed with status: %s", resp.Status)
 	}
-	
+
 	// Read the body
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return "", fmt.Errorf("failed to read response body: %w", err)
 	}
-	
+
 	return string(body), nil
 }
 
@@ -230,30 +230,30 @@ func (m *SummaryModule) Process(ctx context.Context, inputs map[string]any, opts
 	if !ok {
 		return nil, fmt.Errorf("content field is required and must be a string")
 	}
-	
+
 	// Create a prompt for summarization
 	prompt := fmt.Sprintf("Please summarize the following content in 2-3 paragraphs:\n\n%s", content)
-	
+
 	// Generate summary using LLM
 	response, err := m.llm.Generate(ctx, prompt)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate summary: %w", err)
 	}
-	
+
 	// Store summary in Redis
 	mem, err := memory.GetMemoryStore(ctx)
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// Create a unique key for the summary
 	summaryKey := fmt.Sprintf("workflow:summary:%s", time.Now().Format(time.RFC3339))
-	
+
 	// Store the summary
 	if err := mem.Store(summaryKey, response.Content); err != nil {
 		return nil, fmt.Errorf("failed to store summary: %w", err)
 	}
-	
+
 	// Return the summary as output
 	return map[string]any{
 		"summary": response.Content,
@@ -294,33 +294,33 @@ func (m *TranslationModule) Process(ctx context.Context, inputs map[string]any, 
 	if !ok {
 		return nil, fmt.Errorf("summary field is required and must be a string")
 	}
-	
+
 	// Create a prompt for translation
 	prompt := fmt.Sprintf("Translate the following English text to Spanish:\n\n%s", summary)
-	
+
 	// Generate translation using LLM
 	response, err := m.llm.Generate(ctx, prompt)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate translation: %w", err)
 	}
-	
+
 	// Clean up the translation (remove potential prefixes like "Spanish:" or "Translation:")
 	translation := cleanTranslationOutput(response.Content)
-	
+
 	// Store translation in Redis
 	mem, err := memory.GetMemoryStore(ctx)
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// Create a unique key for the translation
 	translationKey := fmt.Sprintf("workflow:translation:%s", time.Now().Format(time.RFC3339))
-	
+
 	// Store the translation
 	if err := mem.Store(translationKey, translation); err != nil {
 		return nil, fmt.Errorf("failed to store translation: %w", err)
 	}
-	
+
 	// Return the translation as output
 	return map[string]any{
 		"translation": translation,
@@ -344,10 +344,10 @@ func (m *TranslationModule) Clone() core.Module {
 func cleanTranslationOutput(translation string) string {
 	// Remove common prefixes that LLMs might add
 	prefixes := []string{
-		"Translation:", "Spanish:", "Spanish Translation:", 
+		"Translation:", "Spanish:", "Spanish Translation:",
 		"Traducción:", "En español:", "Translated text:",
 	}
-	
+
 	result := strings.TrimSpace(translation)
 	for _, prefix := range prefixes {
 		if strings.HasPrefix(strings.ToLower(result), strings.ToLower(prefix)) {
@@ -355,7 +355,7 @@ func cleanTranslationOutput(translation string) string {
 			break
 		}
 	}
-	
+
 	return result
 }
 
@@ -370,10 +370,10 @@ func createSummaryStep(llm core.LLM) *workflows.Step {
 			{Field: core.Field{Name: "summary", Description: "Summarized content"}},
 		},
 	).WithInstruction("Create a concise summary of the content in 2-3 paragraphs")
-	
+
 	// Create a custom module with explicit LLM
 	module := NewSummaryModule(signature, llm)
-	
+
 	return &workflows.Step{
 		ID:     "summarize",
 		Module: module,
@@ -391,12 +391,12 @@ func createTranslationStep(llm core.LLM) *workflows.Step {
 			{Field: core.Field{Name: "translation", Description: "Spanish translation"}},
 		},
 	).WithInstruction("Translate the English summary into Spanish")
-	
+
 	// Create a custom module with explicit LLM
 	module := NewTranslationModule(signature, llm)
-	
+
 	return &workflows.Step{
 		ID:     "translate",
 		Module: module,
 	}
-} 
+}

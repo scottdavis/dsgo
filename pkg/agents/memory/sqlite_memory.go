@@ -35,7 +35,7 @@ func NewSQLiteStore(path string) (*SQLiteStore, error) {
 	} else {
 		connStr = path + "?cache=shared"
 	}
-	
+
 	db, err := sql.Open("sqlite3", connStr)
 	if err != nil {
 		return nil, errors.WithFields(
@@ -157,7 +157,7 @@ func (s *SQLiteStore) Store(key string, value any, opts ...agents.StoreOption) e
 		}
 		_, err = stmt.Exec(key, string(jsonValue))
 	}
-	
+
 	if err != nil {
 		return errors.WithFields(
 			errors.Wrap(err, errors.Unknown, "failed to store value in SQLite"),

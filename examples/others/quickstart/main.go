@@ -65,4 +65,4 @@ func main() {
 	}
 
 	fmt.Printf("Answer: %s\n", result["answer"])
-} 
+}

@@ -36,11 +36,11 @@ func GetRedisStore(ctx context.Context) (*RedisStore, error) {
 	if err != nil {
 		return nil, err
 	}
-	
+
 	redisStore, ok := memory.(*RedisStore)
 	if !ok {
 		return nil, fmt.Errorf("memory store in context is not a Redis store")
 	}
-	
+
 	return redisStore, nil
-} 
+}
