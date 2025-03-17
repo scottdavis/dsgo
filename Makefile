@@ -172,6 +172,35 @@ deps:
 tools:
 	$(GOCMD) install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
 
+# Run Redis agent example using Docker
+.PHONY: redis-start
+redis-start:
+	@echo "Starting Redis container for example..."
+	@docker inspect redis-example >/dev/null 2>&1 || \
+	  docker run -d --name redis-example -p 6379:6379 redis:latest > /dev/null && \
+	  echo "Redis container started."
+
+# Run Redis agent example
+.PHONY: run-redis-example
+run-redis-example:
+	@echo "Running Redis agent example..."
+	@cd examples/agent_redis && go run main.go --redis-addr=localhost:6379
+
+# Run Redis agent example using Docker (combined target)
+.PHONY: redis-example
+redis-example: redis-start run-redis-example
+
+# Stop Redis example container
+.PHONY: redis-stop
+redis-stop:
+	@echo "Stopping Redis container..."
+	@docker stop redis-example >/dev/null 2>&1 && docker rm redis-example >/dev/null 2>&1 || true
+	@echo "Redis container stopped and removed."
+
+# Run all examples
+.PHONY: examples
+examples: redis-example
+
 .PHONY: help
 help:
 	@echo "Make targets:"
@@ -196,4 +225,9 @@ help:
 	@echo "  vet         - Run go vet"
 	@echo "  ci          - Run tests and linting (for CI)"
 	@echo "  deps        - Download and tidy dependencies"
-	@echo "  tools       - Install development tools" 
+	@echo "  tools       - Install development tools"
+	@echo "  redis-start - Start Redis container for examples"
+	@echo "  run-redis-example - Run Redis agent example"
+	@echo "  redis-example - Run Redis agent example using Docker (starts container automatically)"
+	@echo "  redis-stop - Stop Redis example container"
+	@echo "  examples - Run all examples" 

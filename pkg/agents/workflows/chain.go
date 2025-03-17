@@ -29,6 +29,9 @@ func (w *ChainWorkflow) Execute(ctx context.Context, inputs map[string]any) (map
 		state[k] = v
 	}
 
+	// Add memory to context for modules to access
+	ctx = w.ExecuteWithContext(ctx)
+
 	totalSteps := len(w.steps)
 	// Execute steps in sequence
 	for i, step := range w.steps {

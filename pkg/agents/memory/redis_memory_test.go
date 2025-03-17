@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/scottdavis/dsgo/pkg/agents"
 	"github.com/stretchr/testify/require"
 )
 
@@ -116,8 +117,8 @@ func TestRedisAutoExpiration(t *testing.T) {
 
 	ctx := context.Background()
 	
-	// Store with very short TTL (100ms)
-	err = store.StoreWithTTL(ctx, "expire-key", "expire-value", 100*time.Millisecond)
+	// Store with very short TTL (100ms) using the WithTTL option
+	err = store.Store("expire-key", "expire-value", agents.WithTTL(100*time.Millisecond))
 	require.NoError(t, err)
 	
 	// Verify value exists

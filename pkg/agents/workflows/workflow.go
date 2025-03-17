@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/scottdavis/dsgo/pkg/agents"
+	"github.com/scottdavis/dsgo/pkg/agents/memory"
 )
 
 // Workflow represents a sequence of steps that accomplish a task.
@@ -31,12 +32,18 @@ type BaseWorkflow struct {
 	memory agents.Memory
 }
 
-func NewBaseWorkflow(memory agents.Memory) *BaseWorkflow {
+func NewBaseWorkflow(mem agents.Memory) *BaseWorkflow {
 	return &BaseWorkflow{
 		steps:     make([]*Step, 0),
 		stepIndex: make(map[string]*Step),
-		memory:    memory,
+		memory:    mem,
 	}
+}
+
+// ExecuteWithContext prepares a context with memory store for execution
+func (w *BaseWorkflow) ExecuteWithContext(ctx context.Context) context.Context {
+	// Add memory to context for modules to access
+	return memory.WithMemoryStore(ctx, w.memory)
 }
 
 func (w *BaseWorkflow) AddStep(step *Step) error {
@@ -48,7 +55,6 @@ func (w *BaseWorkflow) AddStep(step *Step) error {
 	// Add step to workflow
 	w.steps = append(w.steps, step)
 	w.stepIndex[step.ID] = step
-
 	return nil
 }
 
@@ -58,37 +64,18 @@ func (w *BaseWorkflow) GetSteps() []*Step {
 
 // ValidateWorkflow checks if the workflow structure is valid.
 func (w *BaseWorkflow) ValidateWorkflow() error {
-	// Check for cycles in step dependencies
-	visited := make(map[string]bool)
-	path := make(map[string]bool)
-
-	var checkCycle func(stepID string) error
-	checkCycle = func(stepID string) error {
-		visited[stepID] = true
-		path[stepID] = true
-
-		step := w.stepIndex[stepID]
-		for _, nextID := range step.NextSteps {
-			if !visited[nextID] {
-				if err := checkCycle(nextID); err != nil {
-					return err
-				}
-			} else if path[nextID] {
-				return fmt.Errorf("cycle detected in workflow")
-			}
-		}
-
-		path[stepID] = false
-		return nil
-	}
-
+	// Validate that all nextSteps references exist
 	for _, step := range w.steps {
-		if !visited[step.ID] {
-			if err := checkCycle(step.ID); err != nil {
-				return err
+		for _, nextID := range step.NextSteps {
+			if _, exists := w.stepIndex[nextID]; !exists {
+				return fmt.Errorf("step %s references non-existent step %s", step.ID, nextID)
 			}
 		}
 	}
-
 	return nil
+}
+
+// GetMemory returns the memory associated with this workflow
+func (w *BaseWorkflow) GetMemory() agents.Memory {
+	return w.memory
 }

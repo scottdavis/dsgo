@@ -225,3 +225,77 @@ Check the examples directory for complete implementations:
 
 ### License
 DSGo is released under the MIT License. See the LICENSE file for details.
+
+# Redis Memory Store Example
+
+This example demonstrates how to use Redis as a memory store for DSP-GO applications. The example shows a practical workflow where data is downloaded from an external source, stored in Redis, and then processed in subsequent steps.
+
+## Features Demonstrated
+
+1. **Redis Connection**: Setting up and connecting to a Redis server
+2. **Data Storage**: Storing data in Redis between processing steps
+3. **Data Retrieval**: Retrieving and processing the stored data
+4. **TTL (Time-to-Live)**: Using TTL functionality for automatic expiration of data
+5. **Cleanup**: Properly cleaning up Redis resources
+
+## Running the Example
+
+### Prerequisites
+
+- Redis server running locally or accessible remotely
+- Go 1.18 or later
+
+### Start Redis
+
+If you don't have Redis running, you can quickly start it with Docker:
+
+```bash
+docker run -d --name redis-example -p 6379:6379 redis:latest
+```
+
+### Run the Example
+
+```bash
+go run main.go
+```
+
+By default, it connects to Redis at `localhost:6379`. You can specify a different Redis server:
+
+```bash
+go run main.go --redis-addr=your-redis-server:6379 --redis-password=yourpassword
+```
+
+You can also specify a different URL to download:
+
+```bash
+go run main.go --url=https://raw.githubusercontent.com/your-repo/your-file.txt
+```
+
+## How It Works
+
+The example performs these steps:
+
+1. **Connect to Redis**: Establishes a connection to the Redis server
+2. **Download Content**: Fetches content from a specified URL
+3. **Store in Redis**: Stores the downloaded content in Redis
+4. **Process Content**: Retrieves the content from Redis and processes it (counts lines and words)
+5. **Demonstrate TTL**: Shows how to use TTL functionality to automatically expire data
+6. **Clean Up**: Properly cleans up Redis resources
+
+## Code Structure
+
+- `main.go`: The main application code demonstrating Redis usage
+- `main_test.go`: Tests for the Redis functionality
+
+## Redis Memory Options in DSP-GO
+
+DSP-GO provides several memory store implementations including:
+
+- **Redis**: Used in this example, provides persistent storage with TTL support
+- **In-Memory**: Simple in-memory storage
+- **SQLite**: Local disk-based storage
+
+Redis is particularly useful for:
+- High-performance persistence between application restarts
+- Distributed applications needing shared memory
+- Scenarios requiring automatic data expiration
