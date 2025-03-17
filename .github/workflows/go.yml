@@ -46,6 +46,11 @@ jobs:
         run: go test -tags=redis ./... -v
         env:
           REDIS_TEST_ADDR: localhost:6379
+          
+      - name: Run Distributed Worker tests
+        run: go test -tags=distribworker ./pkg/agents/workflows -v
+        env:
+          REDIS_TEST_ADDR: localhost:6379
 
   unit-tests-others:
     name: Run Unit Tests (${{ matrix.os }})

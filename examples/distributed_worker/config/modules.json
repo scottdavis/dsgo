@@ -1,0 +1,70 @@
+{
+  "modules": {
+    "addition": {
+      "description": "Adds two numbers together",
+      "inputs": [
+        {
+          "name": "a",
+          "type": "number",
+          "description": "First number"
+        },
+        {
+          "name": "b",
+          "type": "number",
+          "description": "Second number"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "result",
+          "type": "number",
+          "description": "The sum of a and b"
+        }
+      ]
+    },
+    "subtraction": {
+      "description": "Subtracts one number from another",
+      "inputs": [
+        {
+          "name": "a",
+          "type": "number",
+          "description": "Number to subtract from"
+        },
+        {
+          "name": "b",
+          "type": "number",
+          "description": "Number to subtract"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "result",
+          "type": "number",
+          "description": "The result of a - b"
+        }
+      ]
+    },
+    "multiplication": {
+      "description": "Multiplies two numbers",
+      "inputs": [
+        {
+          "name": "a",
+          "type": "number",
+          "description": "First number"
+        },
+        {
+          "name": "b",
+          "type": "number",
+          "description": "Second number"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "result",
+          "type": "number",
+          "description": "The product of a and b"
+        }
+      ]
+    }
+  }
+} 

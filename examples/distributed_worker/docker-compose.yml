@@ -1,0 +1,66 @@
+version: '3'
+
+services:
+  redis:
+    image: redis:latest
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  supervisor:
+    build:
+      context: ../../
+      dockerfile: examples/distributed_worker/Dockerfile
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      - REDIS_ADDR=redis:6379
+      - ROLE=supervisor
+      - WORKERS_TO_MONITOR=worker1,worker2
+      - STALLED_WORKFLOW_THRESHOLD=30s
+    volumes:
+      - ./config:/app/config
+
+  worker1:
+    build:
+      context: ../../
+      dockerfile: examples/distributed_worker/Dockerfile
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      - REDIS_ADDR=redis:6379
+      - ROLE=worker
+      - WORKER_ID=worker1
+      - QUEUE_NAME=default
+      - POLL_INTERVAL=1s
+      - CONCURRENCY=5
+    volumes:
+      - ./config:/app/config
+
+  worker2:
+    build:
+      context: ../../
+      dockerfile: examples/distributed_worker/Dockerfile
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      - REDIS_ADDR=redis:6379
+      - ROLE=worker
+      - WORKER_ID=worker2
+      - QUEUE_NAME=default
+      - POLL_INTERVAL=1s
+      - CONCURRENCY=5
+    volumes:
+      - ./config:/app/config
+
+volumes:
+  redis-data: 
